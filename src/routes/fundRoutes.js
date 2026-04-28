@@ -85,48 +85,105 @@ async function loadAppFundLookup() {
   appFundLookupPromise = readFile(backupJsonPath, "utf8")
     .then((content) => JSON.parse(content))
     .then((data) => {
-      const byName = new Map();
+      const appFunds = [];
       for (const fund of data?.funds || []) {
         const keys = new Set([
           ...nameKeys(fund?.fundName),
           ...nameKeys(fund?.rawFundName)
         ]);
-        keys.forEach((key) => {
-          if (!key || byName.has(key)) return;
-          byName.set(key, fund.id || `fund-${keyOf(fund?.category)}-${keyOf(fund?.fundName)}`);
+        appFunds.push({
+          id: fund.id || `fund-${keyOf(fund?.category)}-${keyOf(fund?.fundName)}`,
+          category: clean(fund?.category),
+          fundName: clean(fund?.fundName),
+          rawFundName: clean(fund?.rawFundName),
+          keys: [...keys].filter(Boolean)
         });
       }
-      return byName;
+      return appFunds;
     })
     .catch((error) => {
       logger.warn("Snapshot lookup fallback unavailable", error?.message || error);
-      return new Map();
+      return [];
     });
   return appFundLookupPromise;
 }
 
 export async function buildLiveSnapshotPayload() {
   const allNavData = await getAllFunds();
+  const appFunds = await loadAppFundLookup();
   console.log("AMFI total records:", allNavData.length);
+  console.log("App fund targets:", appFunds.length);
 
-  const filteredFunds = allNavData.map((fund, index) => ({
-    targetId: `debug-${index}`,
-    schemeCode: String(fund?.schemeCode || ""),
-    schemeName: String(fund?.schemeName || ""),
-    isinGrowth: String(fund?.isinGrowth || fund?.isin || ""),
-    nav: Number(fund?.nav),
-    date: String(fund?.date || toIsoDate(fund?.navDate) || ""),
-    source: "amfi"
-  }));
+  const matchedByTargetId = new Map();
 
-  console.log("Filtered funds count:", filteredFunds.length);
-  console.log("Snapshot forced count:", filteredFunds.length);
-  console.log("Sample matched names:", filteredFunds.slice(0, 10).map((fund) => fund.schemeName));
+  for (const fund of allNavData) {
+    const schemeCode = String(fund?.schemeCode || "");
+    const schemeName = String(fund?.schemeName || "");
+    const normalizedScheme = canon(schemeName);
+    const date = String(fund?.date || toIsoDate(fund?.navDate) || "");
+    const nav = Number(fund?.nav);
+    if (!normalizedScheme || !schemeCode || !date || !Number.isFinite(nav)) continue;
 
-  const items = filteredFunds;
+    let bestMatch = null;
+    let bestScore = -1;
 
-  const latestDate = allNavData.reduce((latest, fund) => {
-    const current = String(fund?.date || toIsoDate(fund?.navDate) || "");
+    for (const appFund of appFunds) {
+      for (const key of appFund.keys) {
+        if (!key) continue;
+        if (normalizedScheme.includes(key) || key.includes(normalizedScheme)) {
+          const score = key.length;
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = appFund;
+          }
+        }
+      }
+    }
+
+    if (!bestMatch) continue;
+
+    const nextItem = {
+      targetId: bestMatch.id,
+      schemeCode,
+      schemeName,
+      isinGrowth: String(fund?.isinGrowth || fund?.isin || ""),
+      nav,
+      date,
+      source: "amfi"
+    };
+
+    const current = matchedByTargetId.get(bestMatch.id);
+    if (!current) {
+      matchedByTargetId.set(bestMatch.id, nextItem);
+      continue;
+    }
+
+    const currentDate = new Date(`${current.date}T00:00:00`).getTime();
+    const nextDate = new Date(`${nextItem.date}T00:00:00`).getTime();
+    const currentPriority = liveRowPriority(current.schemeName);
+    const nextPriority = liveRowPriority(nextItem.schemeName);
+
+    if (
+      nextDate > currentDate ||
+      (nextDate === currentDate && nextPriority > currentPriority)
+    ) {
+      matchedByTargetId.set(bestMatch.id, nextItem);
+    }
+  }
+
+  const items = [...matchedByTargetId.values()].sort((left, right) => {
+    const dateDelta = String(right.date || "").localeCompare(String(left.date || ""));
+    if (dateDelta !== 0) return dateDelta;
+    const priorityDelta = liveRowPriority(right.schemeName) - liveRowPriority(left.schemeName);
+    if (priorityDelta !== 0) return priorityDelta;
+    return left.schemeName.localeCompare(right.schemeName);
+  });
+
+  console.log("Filtered funds count:", items.length);
+  console.log("Sample matched names:", items.slice(0, 10).map((fund) => fund.schemeName));
+
+  const latestDate = items.reduce((latest, fund) => {
+    const current = String(fund?.date || "");
     return current > latest ? current : latest;
   }, "");
   const lastFetchTimestamp = allNavData
