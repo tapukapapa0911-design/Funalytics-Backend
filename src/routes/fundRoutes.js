@@ -106,57 +106,28 @@ async function loadAppFundLookup() {
 }
 
 export async function buildLiveSnapshotPayload() {
-  const [funds, appLookup] = await Promise.all([
-    getAllFunds(),
-    loadAppFundLookup()
-  ]);
+  const allNavData = await getAllFunds();
+  console.log("Total AMFI records:", allNavData.length);
 
-  const byTargetId = new Map();
-  funds.forEach((fund) => {
-    const nameKeyMatches = [...nameKeys(fund.schemeName)];
-    const targetId = nameKeyMatches.map((key) => appLookup.get(key)).find(Boolean) || "";
-    if (!targetId) return;
-    const nextItem = {
-      targetId,
+  const filteredFunds = allNavData
+    .slice(0, 50)
+    .map((fund, index) => ({
+      targetId: `debug-${index + 1}`,
       schemeCode: String(fund.schemeCode || ""),
       schemeName: String(fund.schemeName || ""),
       isinGrowth: String(fund.isin || ""),
       nav: Number(fund.nav),
       date: toIsoDate(fund.navDate),
       source: String(fund.source || "backend-amfi")
-    };
-    if (!(nextItem.schemeCode && nextItem.schemeName && Number.isFinite(nextItem.nav) && nextItem.date)) return;
+    }))
+    .filter((item) => item.schemeCode && item.schemeName && Number.isFinite(item.nav) && item.date);
 
-    const existing = byTargetId.get(targetId);
-    if (!existing) {
-      byTargetId.set(targetId, nextItem);
-      return;
-    }
+  console.log("Filtered funds count:", filteredFunds.length);
 
-    const existingDate = existing.date;
-    const nextDate = nextItem.date;
-    if (nextDate > existingDate) {
-      byTargetId.set(targetId, nextItem);
-      return;
-    }
-    if (nextDate < existingDate) {
-      return;
-    }
-
-    if (liveRowPriority(nextItem.schemeName) > liveRowPriority(existing.schemeName)) {
-      byTargetId.set(targetId, nextItem);
-    }
-  });
-
-  const items = [...byTargetId.values()];
-  if (!items.length) {
-    logger.warn("Filtered funds: 0");
-  } else {
-    console.log("Filtered funds:", items.length);
-  }
+  const items = filteredFunds;
 
   const latestDate = items.map((item) => item.date).sort().at(-1) || "";
-  const lastFetchTimestamp = funds
+  const lastFetchTimestamp = allNavData
     .map((fund) => fund?.lastUpdated instanceof Date ? fund.lastUpdated.getTime() : new Date(fund?.lastUpdated || 0).getTime())
     .filter(Number.isFinite)
     .sort((left, right) => right - left)
