@@ -107,22 +107,67 @@ async function loadAppFundLookup() {
 
 export async function buildLiveSnapshotPayload() {
   const allNavData = await getAllFunds();
+  const appFundLookup = await loadAppFundLookup();
   console.log("Total AMFI records:", allNavData.length);
 
-  const filteredFunds = allNavData
-    .slice(0, 50)
-    .map((fund, index) => ({
-      targetId: `debug-${index + 1}`,
-      schemeCode: String(fund.schemeCode || ""),
-      schemeName: String(fund.schemeName || ""),
-      isinGrowth: String(fund.isin || ""),
-      nav: Number(fund.nav),
-      date: toIsoDate(fund.navDate),
-      source: String(fund.source || "backend-amfi")
-    }))
-    .filter((item) => item.schemeCode && item.schemeName && Number.isFinite(item.nav) && item.date);
+  const matchedByTargetId = new Map();
+
+  for (const fund of allNavData) {
+    const schemeCode = String(fund?.schemeCode || "").trim();
+    const schemeName = String(fund?.schemeName || "").trim();
+    const isinGrowth = String(fund?.isin || "").trim();
+    const nav = Number(fund?.nav);
+    const date = toIsoDate(fund?.navDate);
+    if (!schemeCode || !schemeName || !Number.isFinite(nav) || !date) continue;
+
+    const matchedTargetIds = [...new Set(
+      nameKeys(schemeName)
+        .map((key) => appFundLookup.get(key))
+        .filter(Boolean)
+    )];
+    if (!matchedTargetIds.length) continue;
+
+    for (const targetId of matchedTargetIds) {
+      const nextItem = {
+        targetId,
+        schemeCode,
+        schemeName,
+        isinGrowth,
+        nav,
+        date,
+        source: String(fund?.source || "backend-amfi")
+      };
+      const current = matchedByTargetId.get(targetId);
+      if (!current) {
+        matchedByTargetId.set(targetId, nextItem);
+        continue;
+      }
+
+      const currentDate = new Date(`${current.date}T00:00:00`).getTime();
+      const nextDate = new Date(`${nextItem.date}T00:00:00`).getTime();
+      const currentPriority = liveRowPriority(current.schemeName);
+      const nextPriority = liveRowPriority(nextItem.schemeName);
+
+      if (
+        nextDate > currentDate ||
+        (nextDate === currentDate && nextPriority > currentPriority)
+      ) {
+        matchedByTargetId.set(targetId, nextItem);
+      }
+    }
+  }
+
+  const filteredFunds = [...matchedByTargetId.values()]
+    .sort((left, right) => {
+      const dateDelta = String(right.date || "").localeCompare(String(left.date || ""));
+      if (dateDelta !== 0) return dateDelta;
+      const priorityDelta = liveRowPriority(right.schemeName) - liveRowPriority(left.schemeName);
+      if (priorityDelta !== 0) return priorityDelta;
+      return left.schemeName.localeCompare(right.schemeName);
+    });
 
   console.log("Filtered funds count:", filteredFunds.length);
+  console.log("Sample matched names:", filteredFunds.slice(0, 10).map((fund) => fund.schemeName));
 
   const items = filteredFunds;
 
