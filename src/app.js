@@ -17,9 +17,6 @@ function resolveCompressionMiddleware() {
 
 export function createApp() {
   const app = express();
-  app.use(cors());
-  app.use(express.json());
-  app.use("/api", routes);
   app.use(resolveCompressionMiddleware());
   app.use(cors({ origin: "*" }));
   app.use(express.json());
