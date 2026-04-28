@@ -45,15 +45,18 @@ export function readSnapshotFile() {
 
 export function writeSnapshotFile(snapshot) {
   ensureSnapshotFile();
+  const filteredFunds = Array.isArray(snapshot?.items) ? snapshot.items : [];
+  console.log("Filtered funds:", filteredFunds.length);
   const normalized = {
-    generatedAt: String(snapshot?.generatedAt || ""),
+    generatedAt: new Date().toISOString(),
     latestDate: String(snapshot?.latestDate || ""),
     lastFetchTimestamp: String(snapshot?.lastFetchTimestamp || ""),
-    count: Number(snapshot?.count || (Array.isArray(snapshot?.items) ? snapshot.items.length : 0) || 0),
-    items: Array.isArray(snapshot?.items) ? snapshot.items : []
+    count: Number(snapshot?.count || filteredFunds.length || 0),
+    items: filteredFunds
   };
   fs.writeFileSync(snapshotFilePath, JSON.stringify(normalized, null, 2), "utf8");
   logger.info(`NAV snapshot updated at ${snapshotFilePath} (${normalized.latestDate || "unknown-date"}, ${normalized.count} items)`);
+  console.log(`Snapshot saved with ${filteredFunds.length} funds`);
   return normalized;
 }
 

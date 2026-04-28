@@ -1,11 +1,12 @@
 import express from "express";
+import fs from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { env } from "../config/env.js";
 import { findFundBySchemeCode, getAllFunds, getFundCount, getLatestFund, searchFunds } from "../services/navStore.js";
 import { triggerNavUpdate } from "../jobs/navUpdater.js";
-import { readSnapshotFile } from "../services/snapshotStore.js";
+import { ensureSnapshotFile, readSnapshotFile, snapshotFilePath } from "../services/snapshotStore.js";
 import { logger } from "../utils/logger.js";
 
 const router = express.Router();
@@ -148,6 +149,11 @@ export async function buildLiveSnapshotPayload() {
   });
 
   const items = [...byTargetId.values()];
+  if (!items.length) {
+    logger.warn("Filtered funds: 0");
+  } else {
+    console.log("Filtered funds:", items.length);
+  }
 
   const latestDate = items.map((item) => item.date).sort().at(-1) || "";
   const lastFetchTimestamp = funds
@@ -181,6 +187,7 @@ router.get("/update-nav", async (_req, res) => {
   try {
     logger.info("NAV update trigger received");
     const result = await triggerNavUpdate();
+    console.log("Returning result");
     res.json({
       success: true,
       message: "NAV updated",
@@ -199,11 +206,12 @@ router.get("/update-nav", async (_req, res) => {
 router.get("/nav", async (_req, res, next) => {
   try {
     res.set("Cache-Control", "public, max-age=60");
-    const cached = getCached("snapshot");
-    if (cached) return res.json(cached);
-    const payload = readSnapshotFile();
-    setCached("snapshot", payload, 15 * 60 * 1000);
-    res.json(payload);
+    ensureSnapshotFile();
+    const data = JSON.parse(fs.readFileSync(snapshotFilePath, "utf-8"));
+    res.json({
+      latestDate: data.latestDate || "",
+      items: Array.isArray(data.items) ? data.items : []
+    });
   } catch (error) {
     next(error);
   }
