@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { env } from "../config/env.js";
 import { findFundBySchemeCode, getAllFunds, getFundCount, getLatestFund, searchFunds } from "../services/navStore.js";
 import { triggerNavUpdate } from "../jobs/navUpdater.js";
+import { readSnapshotFile } from "../services/snapshotStore.js";
 import { logger } from "../utils/logger.js";
 
 const router = express.Router();
@@ -200,7 +201,7 @@ router.get("/nav", async (_req, res, next) => {
     res.set("Cache-Control", "public, max-age=60");
     const cached = getCached("snapshot");
     if (cached) return res.json(cached);
-    const payload = await buildLiveSnapshotPayload();
+    const payload = readSnapshotFile();
     setCached("snapshot", payload, 15 * 60 * 1000);
     res.json(payload);
   } catch (error) {
@@ -235,7 +236,7 @@ router.get("/api/snapshot", async (_req, res, next) => {
     res.set("Cache-Control", "public, max-age=60");
     const cached = getCached("snapshot");
     if (cached) return res.json(cached);
-    const payload = await buildLiveSnapshotPayload();
+    const payload = readSnapshotFile();
     setCached("snapshot", payload, 15 * 60 * 1000);
     res.json(payload);
   } catch (error) {

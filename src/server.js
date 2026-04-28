@@ -1,10 +1,12 @@
 import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { connectToDatabase } from "./config/db.js";
+import { ensureSnapshotFile } from "./services/snapshotStore.js";
 import { logger } from "./utils/logger.js";
 import mongoose from "mongoose";
 
 async function bootstrap() {
+  ensureSnapshotFile();
   try {
     await connectToDatabase();
   } catch (error) {

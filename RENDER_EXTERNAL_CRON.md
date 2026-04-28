@@ -24,5 +24,5 @@ Notes:
 - Render free tier sleeps. That is okay because cron-job.org will wake it up.
 - The frontend can point to this backend with:
   `localStorage.setItem("fundpulse-live-backend-api-base", "https://YOUR-RENDER-URL")`
-- The backend writes the latest bundled snapshot into:
-  `../mockData/live-nav-snapshot.js`
+- The backend writes the latest snapshot into:
+  `data/live-nav-snapshot.json`

@@ -18,7 +18,7 @@ Retries stop as soon as one run succeeds or AMFI returns "no new NAV available".
 ## Snapshot flow
 
 1. Backend ingests AMFI data into MongoDB.
-2. Backend rewrites `mockData/live-nav-snapshot.js`.
+2. Backend rewrites `data/live-nav-snapshot.json`.
 3. Frontend fetches `/api/snapshot` on app load.
 4. UI updates the existing `Data as of ...` label from the live NAV date in that snapshot.
 
