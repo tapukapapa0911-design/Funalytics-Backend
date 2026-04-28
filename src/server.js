@@ -4,7 +4,6 @@ import { connectToDatabase } from "./config/db.js";
 import { ensureSnapshotFile } from "./services/snapshotStore.js";
 import { logger } from "./utils/logger.js";
 import mongoose from "mongoose";
-import cors from "cors";
 
 async function bootstrap() {
   ensureSnapshotFile();
@@ -15,12 +14,6 @@ async function bootstrap() {
   }
 
   const app = createApp();
-
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST"],
-}));
-
   const port = process.env.PORT || 3000;
   const server = app.listen(port, () => {
     logger.info(`Server started on port ${port}`);
