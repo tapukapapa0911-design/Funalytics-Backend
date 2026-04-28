@@ -119,77 +119,113 @@ export async function buildLiveSnapshotPayload() {
   const previousSnapshot = readSnapshotFile();
   console.log("AMFI total records:", allNavData.length);
   console.log("App fund targets:", appFunds.length);
+  const preparedRows = allNavData
+    .map((fund) => ({
+      schemeCode: String(fund?.schemeCode || ""),
+      schemeName: clean(fund?.schemeName),
+      schemeNameLower: clean(fund?.schemeName).toLowerCase(),
+      schemeNameCanon: canon(fund?.schemeName),
+      isinGrowth: String(fund?.isinGrowth || fund?.isin || ""),
+      nav: Number(fund?.nav),
+      date: String(fund?.date || toIsoDate(fund?.navDate) || ""),
+      source: "amfi"
+    }))
+    .filter((row) => row.schemeCode && row.schemeName && row.schemeNameCanon && row.date && Number.isFinite(row.nav));
 
-  const matchedByTargetId = new Map();
+  const scoreCandidate = (appFund, row) => {
+    let best = -1;
 
-  for (const fund of allNavData) {
-    const schemeCode = String(fund?.schemeCode || "");
-    const schemeName = clean(fund?.schemeName);
-    const schemeNameLower = schemeName.toLowerCase();
-    const normalizedScheme = canon(schemeName);
-    const date = String(fund?.date || toIsoDate(fund?.navDate) || "");
-    const nav = Number(fund?.nav);
-    if (!normalizedScheme || !schemeCode || !date || !Number.isFinite(nav)) continue;
-
-    let bestMatch = null;
-    let bestScore = -1;
-
-    for (const appFund of appFunds) {
-      const rawAliasScore = (appFund.aliases || []).reduce((score, alias) => {
-        if (!alias) return score;
-        if (schemeNameLower.includes(alias) || alias.includes(schemeNameLower)) {
-          return Math.max(score, alias.length + 1000);
-        }
-        return score;
-      }, -1);
-
-      const canonKeyScore = (appFund.keys || []).reduce((score, key) => {
-        if (!key) return score;
-        if (normalizedScheme.includes(key) || key.includes(normalizedScheme)) {
-          return Math.max(score, key.length);
-        }
-        return score;
-      }, -1);
-
-      const score = Math.max(rawAliasScore, canonKeyScore);
-      if (score > bestScore) {
-        bestScore = score;
-        bestMatch = appFund;
+    for (const alias of appFund.aliases || []) {
+      if (!alias) continue;
+      if (row.schemeNameLower.includes(alias) || alias.includes(row.schemeNameLower)) {
+        best = Math.max(best, 1000 + alias.length);
       }
     }
 
-    if (!bestMatch) continue;
-
-    const nextItem = {
-      targetId: bestMatch.id,
-      schemeCode,
-      schemeName,
-      isinGrowth: String(fund?.isinGrowth || fund?.isin || ""),
-      nav,
-      date,
-      source: "amfi"
-    };
-
-    const current = matchedByTargetId.get(bestMatch.id);
-    if (!current) {
-      matchedByTargetId.set(bestMatch.id, nextItem);
-      continue;
+    for (const key of appFund.keys || []) {
+      if (!key) continue;
+      if (row.schemeNameCanon.includes(key) || key.includes(row.schemeNameCanon)) {
+        best = Math.max(best, key.length);
+      }
     }
 
-    const currentDate = new Date(`${current.date}T00:00:00`).getTime();
-    const nextDate = new Date(`${nextItem.date}T00:00:00`).getTime();
-    const currentPriority = liveRowPriority(current.schemeName);
-    const nextPriority = liveRowPriority(nextItem.schemeName);
+    if (best >= 0) return best;
 
+    const rowTokens = new Set(row.schemeNameCanon.split(" ").filter(Boolean));
+    let overlap = 0;
+    for (const key of appFund.keys || []) {
+      const tokens = key.split(" ").filter(Boolean);
+      const shared = tokens.filter((token) => rowTokens.has(token)).length;
+      if (shared >= 2) {
+        overlap = Math.max(overlap, shared * 10 + key.length);
+      }
+    }
+    return overlap > 0 ? overlap : -1;
+  };
+
+  const matchedItems = [];
+
+  for (const appFund of appFunds) {
+    let bestRow = null;
+    let bestScore = -1;
+
+    for (const row of preparedRows) {
+      const score = scoreCandidate(appFund, row);
+      if (score < 0) continue;
+      if (!bestRow) {
+        bestRow = row;
+        bestScore = score;
+        continue;
+      }
+
+      const bestDate = new Date(`${bestRow.date}T00:00:00`).getTime();
+      const nextDate = new Date(`${row.date}T00:00:00`).getTime();
+      const bestPriority = liveRowPriority(bestRow.schemeName);
+      const nextPriority = liveRowPriority(row.schemeName);
+
+      if (
+        score > bestScore ||
+        (score === bestScore && nextDate > bestDate) ||
+        (score === bestScore && nextDate === bestDate && nextPriority > bestPriority)
+      ) {
+        bestRow = row;
+        bestScore = score;
+      }
+    }
+
+    if (!bestRow) continue;
+
+    matchedItems.push({
+      targetId: appFund.id,
+      schemeCode: bestRow.schemeCode,
+      schemeName: bestRow.schemeName,
+      isinGrowth: bestRow.isinGrowth,
+      nav: bestRow.nav,
+      date: bestRow.date,
+      source: bestRow.source
+    });
+  }
+
+  const uniqueByTarget = new Map();
+  for (const item of matchedItems) {
+    if (!uniqueByTarget.has(item.targetId)) {
+      uniqueByTarget.set(item.targetId, item);
+      continue;
+    }
+    const current = uniqueByTarget.get(item.targetId);
+    const currentDate = new Date(`${current.date}T00:00:00`).getTime();
+    const nextDate = new Date(`${item.date}T00:00:00`).getTime();
+    const currentPriority = liveRowPriority(current.schemeName);
+    const nextPriority = liveRowPriority(item.schemeName);
     if (
       nextDate > currentDate ||
       (nextDate === currentDate && nextPriority > currentPriority)
     ) {
-      matchedByTargetId.set(bestMatch.id, nextItem);
+      uniqueByTarget.set(item.targetId, item);
     }
   }
 
-  const items = [...matchedByTargetId.values()].sort((left, right) => {
+  const items = [...uniqueByTarget.values()].sort((left, right) => {
     const dateDelta = String(right.date || "").localeCompare(String(left.date || ""));
     if (dateDelta !== 0) return dateDelta;
     const priorityDelta = liveRowPriority(right.schemeName) - liveRowPriority(left.schemeName);
