@@ -87,6 +87,10 @@ async function loadAppFundLookup() {
     .then((data) => {
       const appFunds = [];
       for (const fund of data?.funds || []) {
+        const rawNames = [
+          clean(fund?.fundName),
+          clean(fund?.rawFundName)
+        ].filter(Boolean);
         const keys = new Set([
           ...nameKeys(fund?.fundName),
           ...nameKeys(fund?.rawFundName)
@@ -96,6 +100,7 @@ async function loadAppFundLookup() {
           category: clean(fund?.category),
           fundName: clean(fund?.fundName),
           rawFundName: clean(fund?.rawFundName),
+          aliases: rawNames.map((name) => name.toLowerCase()),
           keys: [...keys].filter(Boolean)
         });
       }
@@ -111,6 +116,7 @@ async function loadAppFundLookup() {
 export async function buildLiveSnapshotPayload() {
   const allNavData = await getAllFunds();
   const appFunds = await loadAppFundLookup();
+  const previousSnapshot = readSnapshotFile();
   console.log("AMFI total records:", allNavData.length);
   console.log("App fund targets:", appFunds.length);
 
@@ -118,7 +124,8 @@ export async function buildLiveSnapshotPayload() {
 
   for (const fund of allNavData) {
     const schemeCode = String(fund?.schemeCode || "");
-    const schemeName = String(fund?.schemeName || "");
+    const schemeName = clean(fund?.schemeName);
+    const schemeNameLower = schemeName.toLowerCase();
     const normalizedScheme = canon(schemeName);
     const date = String(fund?.date || toIsoDate(fund?.navDate) || "");
     const nav = Number(fund?.nav);
@@ -128,15 +135,26 @@ export async function buildLiveSnapshotPayload() {
     let bestScore = -1;
 
     for (const appFund of appFunds) {
-      for (const key of appFund.keys) {
-        if (!key) continue;
-        if (normalizedScheme.includes(key) || key.includes(normalizedScheme)) {
-          const score = key.length;
-          if (score > bestScore) {
-            bestScore = score;
-            bestMatch = appFund;
-          }
+      const rawAliasScore = (appFund.aliases || []).reduce((score, alias) => {
+        if (!alias) return score;
+        if (schemeNameLower.includes(alias) || alias.includes(schemeNameLower)) {
+          return Math.max(score, alias.length + 1000);
         }
+        return score;
+      }, -1);
+
+      const canonKeyScore = (appFund.keys || []).reduce((score, key) => {
+        if (!key) return score;
+        if (normalizedScheme.includes(key) || key.includes(normalizedScheme)) {
+          return Math.max(score, key.length);
+        }
+        return score;
+      }, -1);
+
+      const score = Math.max(rawAliasScore, canonKeyScore);
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = appFund;
       }
     }
 
@@ -182,10 +200,17 @@ export async function buildLiveSnapshotPayload() {
   console.log("Filtered funds count:", items.length);
   console.log("Sample matched names:", items.slice(0, 10).map((fund) => fund.schemeName));
 
-  const latestDate = items.reduce((latest, fund) => {
+  const safeItems = items.length
+    ? items
+    : (Array.isArray(previousSnapshot?.items) ? previousSnapshot.items : []);
+  if (!items.length && safeItems.length) {
+    logger.warn(`Snapshot matcher produced 0 items, reusing previous snapshot with ${safeItems.length} funds`);
+  }
+
+  const latestDate = safeItems.reduce((latest, fund) => {
     const current = String(fund?.date || "");
     return current > latest ? current : latest;
-  }, "");
+  }, String(previousSnapshot?.latestDate || ""));
   const lastFetchTimestamp = allNavData
     .map((fund) => fund?.lastUpdated instanceof Date ? fund.lastUpdated.getTime() : new Date(fund?.lastUpdated || 0).getTime())
     .filter(Number.isFinite)
@@ -195,8 +220,8 @@ export async function buildLiveSnapshotPayload() {
     generatedAt: new Date().toISOString(),
     latestDate,
     lastFetchTimestamp: lastFetchTimestamp ? new Date(lastFetchTimestamp).toISOString() : "",
-    count: items.length,
-    items
+    count: safeItems.length,
+    items: safeItems
   };
 }
 
