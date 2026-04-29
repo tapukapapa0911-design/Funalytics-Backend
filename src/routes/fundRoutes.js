@@ -165,20 +165,13 @@ router.get("/meta/last-updated", async (_req, res) => {
 router.get("/update-nav", async (_req, res) => {
   try {
     logger.info("NAV update trigger received");
-    const result = await triggerNavUpdate();
-    console.log("Returning result");
-    res.json({
-      success: true,
-      message: "NAV updated",
-      result: result || null
-    });
+
+    await triggerNavUpdate();
+
+    res.send("OK");   // ✅ bas ye hi response hona chahiye
   } catch (error) {
     logger.error("NAV update trigger failed", error?.message || error);
-    res.status(500).json({
-      success: false,
-      message: "NAV update failed",
-      error: error?.message || "Unknown error"
-    });
+    res.status(500).send("Error");
   }
 });
 
