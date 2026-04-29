@@ -1,12 +1,11 @@
 import express from "express";
-import fs from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { env } from "../config/env.js";
 import { findFundBySchemeCode, getAllFunds, getFundCount, getLatestFund, searchFunds } from "../services/navStore.js";
 import { triggerNavUpdate } from "../jobs/navUpdater.js";
-import { ensureSnapshotFile, readSnapshotFile, snapshotFilePath } from "../services/snapshotStore.js";
+import { readSnapshotFile } from "../services/snapshotStore.js";
 import { logger } from "../utils/logger.js";
 
 const router = express.Router();
@@ -178,12 +177,8 @@ router.get("/update-nav", async (_req, res) => {
 router.get("/nav", async (_req, res, next) => {
   try {
     res.set("Cache-Control", "public, max-age=60");
-    ensureSnapshotFile();
-    const data = JSON.parse(fs.readFileSync(snapshotFilePath, "utf-8"));
-    res.json({
-      latestDate: data.latestDate || "",
-      items: Array.isArray(data.items) ? data.items : []
-    });
+    const data = readSnapshotFile();
+    res.json(data);
   } catch (error) {
     next(error);
   }

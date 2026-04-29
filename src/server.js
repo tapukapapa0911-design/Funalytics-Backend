@@ -1,7 +1,8 @@
 import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { connectToDatabase } from "./config/db.js";
-import { ensureSnapshotFile } from "./services/snapshotStore.js";
+import { ensureSnapshotFile, readSnapshotFile } from "./services/snapshotStore.js";
+import { triggerNavUpdate } from "./jobs/navUpdater.js";
 import { logger } from "./utils/logger.js";
 import mongoose from "mongoose";
 
@@ -17,6 +18,14 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   const server = app.listen(port, () => {
     logger.info(`Server started on port ${port}`);
+    const snapshot = readSnapshotFile();
+    const isSnapshotEmpty = !snapshot.generatedAt || !snapshot.latestDate || !Array.isArray(snapshot.items) || !snapshot.items.length;
+    if (isSnapshotEmpty) {
+      logger.info("Snapshot empty on startup, triggering immediate NAV warmup");
+      triggerNavUpdate().catch((error) => {
+        logger.warn(`Startup NAV warmup failed: ${error?.message || error}`);
+      });
+    }
   });
 
   server.on("error", (error) => {

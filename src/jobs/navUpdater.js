@@ -26,7 +26,7 @@ export async function triggerNavUpdate() {
     logger.info("NAV updated successfully");
     const resultObject = {
       source: "amfi",
-      status: ingestionResult?.status === "no-new-nav" ? "updated" : "updated",
+      status: ingestionResult?.status === "no-new-nav" ? "no-new-nav" : "updated",
       processed: Number(ingestionResult?.processed || 0),
       latestDate: String(snapshot.latestDate || ingestionResult?.latestDate || ""),
       snapshotCount: Number(snapshot.count || 0)
