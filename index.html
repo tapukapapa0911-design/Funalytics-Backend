@@ -1,0 +1,384 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#070A12" />
+    <script>
+      window.LIVE_CONFIG = {
+        backendApiBase: "https://funalytics-backend.onrender.com"
+      };
+    </script>
+    <title>Funalytics Main App - Mutual Fund Analytics Dashboard</title>
+    <link rel="manifest" href="manifest.json?v=2" />
+    <link rel="apple-touch-icon" href="icons/light-logo.png" />
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <main class="phone-shell" aria-label="Funalytics mobile app">
+      <section class="app-frame">
+        <div id="splashScreen" class="splash-screen" aria-hidden="true">
+          <div class="splash-logo-shell">
+            <img class="splash-logo splash-logo-dark" src="icons/light-logo.png" alt="Funalytics" />
+            <img class="splash-logo splash-logo-light" src="icons/dark-logo.png" alt="Funalytics" />
+          </div>
+        </div>
+        <div id="onboarding" class="onboarding-overlay" hidden aria-hidden="true">
+          <div class="onboarding-panel">
+            <div class="onboard-container" id="onboardContainer">
+              <section class="onboarding-step onboarding-card install-step">
+                <p class="eyebrow">Get started</p>
+                <h2>Install Funalytics</h2>
+                <p class="muted">Install the app for faster access and a smoother, app-like experience.</p>
+                <div class="onboarding-actions button-row">
+                  <button class="primary-action install-btn" id="onboardingInstallButton" type="button">Install</button>
+                  <button class="secondary-action" id="onboardingSkipInstall" type="button">Skip</button>
+                </div>
+              </section>
+              <section class="onboarding-step onboarding-card">
+                <h2>Welcome to Funalytics</h2>
+                <p class="muted">Clear rankings, cleaner comparisons, and a dashboard built for quick fund decisions.</p>
+                <div class="onboarding-actions button-row single">
+                  <button class="primary-action onboarding-next" id="onboardingWelcomeNext" type="button">Next</button>
+                </div>
+              </section>
+              <section class="onboarding-step onboarding-card">
+                <h2>Track category leaders</h2>
+                <p class="muted">See the strongest funds in each category with score, trend, and return context in one view.</p>
+                <div class="onboarding-actions button-row">
+                  <button class="secondary-action onboarding-skip-all" type="button">Skip</button>
+                  <button class="primary-action onboarding-next" type="button">Next</button>
+                </div>
+              </section>
+              <section class="onboarding-step onboarding-card">
+                <h2>Compare funds faster</h2>
+                <p class="muted">Switch horizons quickly and compare two funds without losing the category context.</p>
+                <div class="onboarding-actions button-row">
+                  <button class="secondary-action onboarding-skip-all" type="button">Skip</button>
+                  <button class="primary-action onboarding-next" type="button">Next</button>
+                </div>
+              </section>
+              <section class="onboarding-step onboarding-card onboarding-last-screen">
+                <h2 class="title">Make Smarter Fund Decisions</h2>
+                <p class="muted description">All your rankings, insights, and comparisons in one place. Streamlined for clarity, optimized for speed, and designed to help you decide with confidence.</p>
+                <div class="onboarding-actions button-row">
+                  <button class="secondary-action onboarding-skip-all" type="button">Skip</button>
+                  <button class="primary-action onboarding-next" id="letsGoBtn" type="button">Let’s Go</button>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+        <div id="skeleton" class="skeleton-screen">
+          <div class="skeleton hero"></div>
+          <div class="skeleton-row">
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+          </div>
+          <div class="skeleton chart"></div>
+          <div class="skeleton list"></div>
+        </div>
+
+        <div id="app" class="app is-loading">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">Mutual Fund Dashboard</p>
+              <h1>Funalytics</h1>
+            </div>
+            <button class="icon-button" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
+              <span id="themeIcon" class="theme-glyph" aria-hidden="true">
+                <svg class="theme-svg theme-moon" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                  <path d="M14.8 3.2a8.8 8.8 0 1 0 6 15.3 9.6 9.6 0 0 1-11-11 8.7 8.7 0 0 1 5-4.3Z" fill="currentColor"/>
+                </svg>
+                <svg class="theme-svg theme-sun" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                  <circle cx="12" cy="12" r="4.5" fill="currentColor"/>
+                  <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <path d="M12 2.5v3.1"/>
+                    <path d="M12 18.4v3.1"/>
+                    <path d="M2.5 12h3.1"/>
+                    <path d="M18.4 12h3.1"/>
+                    <path d="m5.3 5.3 2.2 2.2"/>
+                    <path d="m16.5 16.5 2.2 2.2"/>
+                    <path d="m18.7 5.3-2.2 2.2"/>
+                    <path d="m7.5 16.5-2.2 2.2"/>
+                  </g>
+                </svg>
+              </span>
+            </button>
+          </header>
+
+          <section class="controls-strip">
+            <button class="category-trigger" id="categoryTrigger" data-picker-target="category" aria-label="Choose category">
+              <span>Category</span>
+              <strong id="categoryValue">Large Cap Fund</strong>
+              <i aria-hidden="true"></i>
+            </button>
+          </section>
+
+          <section class="screen active" id="screen-dashboard" aria-label="Dashboard">
+            <div class="summary-hero">
+              <div>
+                <p class="eyebrow">Selected category</p>
+                <h2 id="heroCategory">Large Cap Fund</h2>
+                <p id="heroDate" class="muted">Latest data</p>
+              </div>
+              <div class="hero-score" id="heroScoreBadge" data-score-tone="neutral">
+                <em class="hero-score-kicker">Funalytics</em>
+                <span id="heroScore" aria-live="polite">0</span>
+                <small>Score</small>
+              </div>
+            </div>
+            <p class="hero-score-helper eyebrow">Funalytics Score is based on returns, consistency &amp; relative performance.</p>
+
+            <div class="quick-filter-row dashboard-return-tabs" aria-label="Return horizon">
+              <button class="active" data-horizon="oneYear">1Y</button>
+              <button data-horizon="threeYear">3Y</button>
+              <button data-horizon="fiveYear">5Y</button>
+            </div>
+
+            <div class="kpi-grid">
+              <article class="metric-card wide is-tappable" id="topPerformerCard" role="button" tabindex="0" aria-label="Open top performer insight">
+                <span class="metric-icon violet icon-top" aria-hidden="true"></span>
+                <p>Top Performer</p>
+                <strong id="topPerformer">-</strong>
+              </article>
+              <div id="topPerformerInsightMount" class="top-performer-insight-shell" aria-hidden="true"></div>
+              <article class="metric-card">
+                <span class="metric-icon accent icon-return" aria-hidden="true"></span>
+                <p>Average Return</p>
+                <strong id="avgReturn">0%</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-icon blue icon-average" aria-hidden="true"></span>
+                <p>Category Average</p>
+                <strong id="categoryAverage">0</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-icon teal icon-consistency" aria-hidden="true"></span>
+                <p>Consistency</p>
+                <strong id="consistency">0</strong>
+              </article>
+              <article class="metric-card">
+                <span class="metric-icon accent icon-total" aria-hidden="true"></span>
+                <p>Total Funds</p>
+                <strong id="totalFunds">0</strong>
+              </article>
+            </div>
+
+            <div class="chart-panel">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Performance Analytics</p>
+                  <h3>Top fund vs category average</h3>
+                </div>
+                <div class="time-filter" role="group" aria-label="Time filter">
+                  <button data-period="1M">1M</button>
+                  <button data-period="3M">3M</button>
+                  <button data-period="6M">6M</button>
+                  <button class="active" data-period="1Y">1Y</button>
+                </div>
+              </div>
+              <div id="lineChart" class="line-chart"></div>
+              <div id="performanceTooltip" class="chart-tooltip" hidden></div>
+            </div>
+
+            <div class="insight-card primary">
+              <p class="eyebrow">AI-style summary</p>
+              <h3 id="dashboardInsight">Generating insight...</h3>
+            </div>
+
+          </section>
+
+          <section class="screen" id="screen-funds" aria-label="Fund list">
+            <div class="search-row">
+              <input id="searchInput" type="text" placeholder="Search mutual funds" />
+              <button class="icon-button" id="clearSearch" aria-label="Clear search" title="Clear search">&times;</button>
+            </div>
+            <div class="chip-row">
+              <button class="chip active" data-sort="rank">Rank</button>
+              <button class="chip" data-sort="return">Return</button>
+              <button class="chip" data-sort="consistency">Consistency</button>
+            </div>
+            <div class="segmented fund-view-toggle" aria-label="Fund view">
+              <button class="active" data-fund-view="all">All Funds</button>
+              <button data-fund-view="favorites">Saved Funds</button>
+            </div>
+            <div id="rankingFilterMount"></div>
+            <div id="fundList" class="fund-list"></div>
+          </section>
+
+          <section class="screen" id="screen-insights" aria-label="Insights">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">AI Insights</p>
+                <h3>Analyst brief</h3>
+              </div>
+            </div>
+            <div id="insightsList" class="insights-list"></div>
+            <div class="chart-panel full-span">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Category Leadership</p>
+                  <h3>Top funds by dashboard score</h3>
+                </div>
+              </div>
+              <div id="analysisChart" class="bar-chart"></div>
+            </div>
+          </section>
+
+          <section class="screen" id="screen-compare" aria-label="Compare categories">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Fund comparison</p>
+                <h3>Compare funds in selected category</h3>
+              </div>
+            </div>
+            <div class="compare-controls">
+              <button class="category-trigger compact" id="compareFundATrigger" data-picker-target="compareFundA">
+                <span>Fund A</span>
+                <strong id="compareFundAValue">Select fund</strong>
+                <i aria-hidden="true"></i>
+              </button>
+              <button class="category-trigger compact" id="compareFundBTrigger" data-picker-target="compareFundB">
+                <span>Fund B</span>
+                <strong id="compareFundBValue">Select fund</strong>
+                <i aria-hidden="true"></i>
+              </button>
+            </div>
+            <div id="compareContent" class="compare-grid"></div>
+          </section>
+
+          <section class="screen" id="screen-profile" aria-label="Profile">
+            <div class="profile-card">
+              <div class="avatar" aria-hidden="true">
+                <img class="brand-logo brand-logo-dark" src="icons/light-logo.png" alt="" />
+                <img class="brand-logo brand-logo-light" src="icons/dark-logo.png" alt="" />
+              </div>
+              <h2>Funalytics</h2>
+              <p>Funalytics is a smart mutual fund analytics platform that transforms Excel-based data into clear rankings, performance insights, and decision-ready dashboards.</p>
+            </div>
+            <div class="settings-list">
+              <button class="setting-row" id="profileTheme">
+                <span>Theme</span>
+                <strong id="profileThemeValue">Dark</strong>
+              </button>
+              <label class="upload-row">
+                <span>Upload updated Excel</span>
+                <strong id="uploadStatus">Choose .xlsx</strong>
+                <input id="excelUpload" type="file" accept=".xlsx,.json" />
+              </label>
+              <button class="setting-row" id="saveReport">
+                <span>Save report</span>
+                <strong>Generate PDF</strong>
+              </button>
+              <button class="setting-row" id="methodologyButton">
+                <span>Insights &amp; Methodology</span>
+                <strong>View Details</strong>
+              </button>
+              <a class="setting-row contact-link" href="mailto:ameenmkhan2004@gmail.com">
+                <span>Contact Developer</span>
+                <strong>ameenmkhan2004@gmail.com</strong>
+              </a>
+              <div class="about-item" id="installAppBtn" hidden>
+                <span>Install App</span>
+                <span id="installStatus">Tap to install</span>
+              </div>
+            </div>
+            <footer class="credits">Developed by Ameen Khan</footer>
+          </section>
+
+        </div>
+        <button class="update-banner" id="updateBanner" type="button" hidden aria-label="Refresh to latest version">
+          New update available • Tap to refresh
+        </button>
+        <nav class="bottom-nav" aria-label="Main navigation">
+          <button class="active" data-tab="dashboard"><span>&#8962;</span>Dashboard</button>
+          <button data-tab="funds"><span>&#8776;</span>Rankings</button>
+          <button data-tab="insights"><span>&#10022;</span>Analysis</button>
+          <button data-tab="compare"><span>&#8644;</span>Compare</button>
+          <button data-tab="profile"><span>&#9675;</span>About</button>
+        </nav>
+      </section>
+    </main>
+
+    <div id="global-modal" class="global-modal" hidden aria-hidden="true">
+      <div id="global-modal-backdrop" class="global-modal__backdrop"></div>
+      <section id="global-modal-card" class="global-modal__card" role="dialog" aria-modal="true" aria-label="Funalytics modal">
+        <button id="global-modal-close" class="sheet-close global-modal__close" type="button" aria-label="Close modal">&times;</button>
+        <div id="global-modal-content" class="global-modal__content"></div>
+      </section>
+    </div>
+
+    <script>
+      window.FUND_APP_DATA = window.FUND_APP_DATA || {
+        analysis: "fallback",
+        latestDate: "",
+        liveNavDate: null,
+        categories: ["Large Cap Fund"],
+        summaries: [{
+          category: "Large Cap Fund",
+          totalFunds: 3,
+          categoryAverageReturn: 10.2,
+          categoryAverageScore: 69,
+          consistencyScore: 4.1,
+          topPerformer: "ICICI Pru Large Cap Fund (G)",
+          topScore: 76,
+          topTrend: "Declining",
+          latestDate: ""
+        }],
+        funds: [
+          { id: "fallback-1", category: "Large Cap Fund", fundName: "ICICI Pru Large Cap Fund (G)", rank: 1, dashboardScore: 76, consistency: 5.7, trend: "Declining", trendDelta: -11, flag: "Top Performers", oneYear: -0.0296, threeYear: 0.1392, fiveYear: 0.1323, history: [{date:"",score:77},{date:"",score:66}], parameterBreakdown: [] },
+          { id: "fallback-2", category: "Large Cap Fund", fundName: "Invesco India Largecap Fund (G)", rank: 2, dashboardScore: 71, consistency: 3.9, trend: "Improving", trendDelta: 4, flag: "Top Performers", oneYear: null, threeYear: null, fiveYear: null, history: [{date:"",score:66},{date:"",score:70}], parameterBreakdown: [] },
+          { id: "fallback-3", category: "Large Cap Fund", fundName: "Dsp Large Cap Fund - Regular (G)", rank: 3, dashboardScore: 70, consistency: 2.9, trend: "Declining", trendDelta: -3, flag: "Top Performers", oneYear: -0.0359, threeYear: 0.1432, fiveYear: 0.1082, history: [{date:"",score:74},{date:"",score:71}], parameterBreakdown: [] }
+        ],
+        scoring: { weights: [
+          { label: "1Y", weight: 0.10, direction: "higher is better" },
+          { label: "3Y", weight: 0.20, direction: "higher is better" },
+          { label: "5Y", weight: 0.25, direction: "higher is better" },
+          { label: "Sharpe", weight: 0.15, direction: "higher is better" },
+          { label: "P/E", weight: 0.10, direction: "lower is better" },
+          { label: "P/B", weight: 0.10, direction: "lower is better" },
+          { label: "Sortino", weight: 0.10, direction: "higher is better" }
+        ] }
+      };
+      setTimeout(function () {
+        var app = document.getElementById("app");
+        if (app && app.classList.contains("is-loading")) {
+          var data = window.FUND_APP_DATA;
+          var summary = data.summaries[0];
+          var set = function (id, value) {
+            var node = document.getElementById(id);
+            if (node && value !== undefined && value !== null && value !== "") node.textContent = value;
+          };
+          set("heroCategory", summary.category);
+          set("heroScore", summary.topScore);
+          set("topPerformer", summary.topPerformer);
+        }
+      }, 280);
+      setTimeout(function () {
+        var app = document.getElementById("app");
+        var skeleton = document.getElementById("skeleton");
+        if (!app || !app.classList.contains("is-loading")) return;
+        var heroDate = document.getElementById("heroDate");
+        if (heroDate && !heroDate.textContent.trim()) {
+          heroDate.textContent = "Latest NAV syncing";
+        } else if (heroDate && heroDate.textContent.trim() === "Latest data") {
+          heroDate.textContent = "Latest NAV syncing";
+        }
+        app.classList.remove("is-loading");
+        if (skeleton) skeleton.classList.add("hide");
+      }, 1200);
+    </script>
+  <script defer src="mockData/excel-backup.js?v=live-nav-v23"></script>
+  <script defer src="mockData/live-nav-snapshot.js?v=live-nav-v23"></script>
+  <script defer src="constants/schema.js?v=live-nav-v23"></script>
+  <script defer src="utils/cache.js?v=live-nav-v23"></script>
+  <script defer src="utils/validation.js?v=live-nav-v23"></script>
+  <script defer src="services/calculations.js?v=live-nav-v23"></script>
+  <script defer src="services/apiClients.js?v=live-nav-v23"></script>
+  <script defer src="services/matcher.js?v=live-nav-v23"></script>
+  <script defer src="services/dataMapper.js?v=live-nav-v23"></script>
+  <script defer src="services/dataProvider.js?v=live-nav-v23"></script>
+  <script defer src="src/bootstrap.js?v=live-nav-v23"></script>
+  </body>
+</html>

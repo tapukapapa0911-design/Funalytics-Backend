@@ -1,59 +1,72 @@
-# Live Data Version Backend
+# live-data-version
 
-This backend lives entirely inside `live-data-version/` and powers the live NAV layer for the Funalytics live app.
+This folder is a separate replica of the Funalytics app that keeps the original app untouched.
 
-## Features
+## What changed
 
-- Daily AMFI NAV ingestion
-- Daily snapshot regeneration for the frontend bundle
-- MongoDB bulk upserts keyed by `schemeCode`
-- Retry + logging
-- REST API for the live frontend
-- Daily cron at `12:00 AM IST`
-- Retries at `12:15 AM`, `12:30 AM`, `06:00 AM`, then every 15 minutes until end of day if needed
+- UI shell is cloned from the current app.
+- Data bootstraps from `mockData/excel-backup.json`.
+- Live refresh attempts use the AMFI NAV feed only.
+- Live data is mapped back into the same normalized `excel-dashboard`-style shape the UI already expects.
 
-## Setup
+## Architecture
 
-1. Copy `.env.example` to `.env`
-2. Set `MONGODB_URI`
-3. Install dependencies:
-   - `npm install`
-4. Start:
-   - `npm run dev`
+- `constants/schema.js`: workbook-derived scoring weights, cache keys, source definitions
+- `utils/cache.js`: local cache helpers
+- `utils/validation.js`: data-shape safety
+- `services/apiClients.js`: AMFI fetch clients
+- `services/matcher.js`: scheme matching helpers for resilient NAV mapping
+- `services/navResolver.js`: AMFI NAV resolution and caching
+- `services/calculations.js`: workbook-equivalent scoring and return helpers
+- `services/dataMapper.js`: live data -> workbook schema mapping
+- `services/dataProvider.js`: boot, refresh, cache, fallback orchestration
+- `mockData/excel-backup.json`: fallback dataset converted from the workbook export
+- `src/bootstrap.js`: loads cached/backup data first, then refreshes live in the background
+- `backend/`: standalone Node.js + MongoDB NAV ingestion API for production use
 
-## Endpoints
+## Notes
 
-- `GET /health`
-- `GET /funds`
-- `GET /api/snapshot`
-- `GET /api/cron`
-- `GET /fund/:schemeCode`
-- `GET /search?q=keyword`
-- `GET /meta/last-updated`
+- The live version keeps the original app contract intact.
+- If live fetch fails or a field is unavailable from verified sources, the app falls back to the cached/backup workbook-converted dataset.
+- This keeps the UI stable while gradually replacing workbook-derived values with live values.
 
-## Frontend hook
+## Backend API Option
 
-To make `live-data-version/index.html` use this backend first, add before app scripts:
+This folder now includes a backend service at `backend/` that can:
+
+- ingest AMFI NAV daily
+- store all schemes in MongoDB
+- expose REST APIs for the live app
+
+To make the frontend prefer the local backend, add before scripts in `index.html`:
 
 ```html
 <script>
   window.LIVE_CONFIG = {
-    backendApiBase: "http://localhost:4000"
+    backendApiBase: "https://your-render-service.onrender.com"
   };
 </script>
 ```
 
-## Production deployment
+If `backendApiBase` is not configured or the backend is unavailable, the app falls back to the existing client-side live NAV resolver automatically.
 
-Deployment files included:
+You can also set it without editing files:
 
-- [render.yaml](C:\Users\ameen\Documents\Codex\2026-04-17-files-mentioned-by-the-user-mutual\mutual-fund-dashboard-app\live-data-version\backend\render.yaml)
-- [.nvmrc](C:\Users\ameen\Documents\Codex\2026-04-17-files-mentioned-by-the-user-mutual\mutual-fund-dashboard-app\live-data-version\backend\.nvmrc)
-- [RENDER_DEPLOY.md](C:\Users\ameen\Documents\Codex\2026-04-17-files-mentioned-by-the-user-mutual\mutual-fund-dashboard-app\live-data-version\backend\RENDER_DEPLOY.md)
+```js
+localStorage.setItem("fundpulse-live-backend-api-base", "https://your-render-service.onrender.com");
+location.reload();
+```
 
-The app already:
+## Live Data Sources
 
-- respects `PORT`
-- starts cron automatically on boot
-- runs an initial NAV update on startup
-- uses environment-driven MongoDB configuration
+| Metric | Source | Frequency | Notes |
+|---|---|---|---|
+| Latest NAV | AMFI NAVAll.txt | Daily | Official, authoritative |
+| 1Y / 3Y / 5Y Returns | Excel backup | Static | Workbook-derived fallback values |
+| Sharpe Ratio | Excel backup | Static | Workbook-derived fallback values |
+| Sortino Ratio | Excel backup | Static | Workbook-derived fallback values |
+| Volatility | Excel backup | Static | Workbook-derived fallback values |
+| PE Ratio | Excel backup (quarterly manual update) | Static | No free public API for portfolio P/E |
+| PB Ratio | Excel backup (quarterly manual update) | Static | No free public API for portfolio P/B |
+
+Note: PE and PB remain workbook-backed portfolio metrics until a separate verified source is introduced.
