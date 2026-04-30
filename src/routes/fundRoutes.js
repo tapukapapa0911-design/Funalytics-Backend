@@ -32,6 +32,66 @@ function setCached(key, payload, ttlMs = env.cacheTtlMs) {
   });
 }
 
+const summariseNavUpdate = (result = {}, fallback = {}) => ({
+  status: String(result?.status || fallback?.status || "unknown"),
+  latestDate: String(result?.latestDate || fallback?.latestDate || ""),
+  count: typeof result?.count === "number"
+    ? result.count
+    : typeof result?.snapshotCount === "number"
+      ? result.snapshotCount
+      : Array.isArray(result?.items)
+        ? result.items.length
+        : Number(fallback?.count || 0),
+  generatedAt: String(result?.generatedAt || fallback?.generatedAt || ""),
+  durationMs: Number(result?.durationMs || fallback?.durationMs || 0),
+  ...(result?.skipped ? { skipped: true } : {})
+});
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+const shouldSkipRedundantNavUpdate = (snapshot) => (
+  String(snapshot?.latestDate || "") === todayIso()
+  && Number(snapshot?.count || 0) > 1000
+);
+
+async function handleNavUpdateRequest(_req, res) {
+  const startedAt = Date.now();
+  try {
+    logger.info("NAV update trigger received");
+
+    const existing = readSnapshotFile();
+    if (shouldSkipRedundantNavUpdate(existing)) {
+      return res.json(summariseNavUpdate({
+        status: "no-new-nav",
+        latestDate: existing.latestDate,
+        count: existing.count,
+        generatedAt: existing.generatedAt,
+        durationMs: Date.now() - startedAt,
+        skipped: true
+      }));
+    }
+
+    const result = await triggerNavUpdate();
+    const updated = readSnapshotFile();
+    return res.json(summariseNavUpdate(result, {
+      latestDate: updated.latestDate,
+      count: updated.count,
+      generatedAt: updated.generatedAt,
+      durationMs: Date.now() - startedAt
+    }));
+  } catch (error) {
+    logger.error("NAV update trigger failed", error?.message || error);
+    return res.status(500).json({
+      status: "error",
+      latestDate: "",
+      count: 0,
+      generatedAt: "",
+      durationMs: Date.now() - startedAt,
+      error: String(error?.message || "NAV update failed")
+    });
+  }
+}
+
 export function clearResponseCache(prefix = "") {
   if (!prefix) {
     responseCache.clear();
@@ -161,18 +221,8 @@ router.get("/meta/last-updated", async (_req, res) => {
   });
 });
 
-router.get("/update-nav", async (_req, res) => {
-  try {
-    logger.info("NAV update trigger received");
-
-    await triggerNavUpdate();
-
-    res.send("OK");   // ✅ bas ye hi response hona chahiye
-  } catch (error) {
-    logger.error("NAV update trigger failed", error?.message || error);
-    res.status(500).send("Error");
-  }
-});
+router.get("/update-nav", handleNavUpdateRequest);
+router.post("/update-nav", handleNavUpdateRequest);
 
 router.get("/nav", async (_req, res, next) => {
   try {
@@ -220,12 +270,28 @@ router.get("/api/snapshot", async (_req, res, next) => {
 });
 
 router.get("/api/cron", async (_req, res, next) => {
+  const startedAt = Date.now();
   try {
+    const existing = readSnapshotFile();
+    if (shouldSkipRedundantNavUpdate(existing)) {
+      return res.json(summariseNavUpdate({
+        status: "no-new-nav",
+        latestDate: existing.latestDate,
+        count: existing.count,
+        generatedAt: existing.generatedAt,
+        durationMs: Date.now() - startedAt,
+        skipped: true
+      }));
+    }
+
     const result = await triggerNavUpdate();
-    res.json({
-      ok: true,
-      result: result || null
-    });
+    const updated = readSnapshotFile();
+    res.json(summariseNavUpdate(result, {
+      latestDate: updated.latestDate,
+      count: updated.count,
+      generatedAt: updated.generatedAt,
+      durationMs: Date.now() - startedAt
+    }));
   } catch (error) {
     next(error);
   }
@@ -261,3 +327,4 @@ router.get("/search", async (req, res, next) => {
 });
 
 export { router as fundRoutes };
+
