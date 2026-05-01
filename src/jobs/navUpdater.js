@@ -6,14 +6,15 @@ import { buildLiveSnapshotPayload, clearResponseCache } from "../routes/fundRout
 let running = false;
 
 export async function triggerNavUpdate() {
+  const startedAt = Date.now();
   if (running) {
     logger.warn("NAV update skipped because a run is already in progress");
     return {
-      source: "amfi",
       status: "running",
-      processed: 0,
       latestDate: "",
-      snapshotCount: 0
+      count: 0,
+      generatedAt: "",
+      durationMs: Date.now() - startedAt
     };
   }
   running = true;
@@ -25,11 +26,11 @@ export async function triggerNavUpdate() {
     clearResponseCache();
     logger.info("NAV updated successfully");
     const resultObject = {
-      source: "amfi",
       status: ingestionResult?.status === "no-new-nav" ? "no-new-nav" : "updated",
-      processed: Number(ingestionResult?.processed || 0),
       latestDate: String(snapshot.latestDate || ingestionResult?.latestDate || ""),
-      snapshotCount: Number(snapshot.count || 0)
+      count: Number(snapshot.count || 0),
+      generatedAt: String(snapshot.generatedAt || ""),
+      durationMs: Date.now() - startedAt
     };
     console.log("Returning result", resultObject);
     return resultObject;

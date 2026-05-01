@@ -1,4 +1,4 @@
-import express from "express";
+﻿import express from "express";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,7 +32,16 @@ function setCached(key, payload, ttlMs = env.cacheTtlMs) {
   });
 }
 
-const summariseNavUpdate = (result = {}, fallback = {}) => ({
+const safeResponse = (obj) => {
+  const out = {};
+  for (const [key, value] of Object.entries(obj || {})) {
+    if (!Array.isArray(value)) out[key] = value;
+  }
+  if (typeof obj?.items?.length === "number") out.count = obj.items.length;
+  return out;
+};
+
+const summariseNavUpdate = (result = {}, fallback = {}) => safeResponse({
   status: String(result?.status || fallback?.status || "unknown"),
   latestDate: String(result?.latestDate || fallback?.latestDate || ""),
   count: typeof result?.count === "number"
@@ -44,15 +53,28 @@ const summariseNavUpdate = (result = {}, fallback = {}) => ({
         : Number(fallback?.count || 0),
   generatedAt: String(result?.generatedAt || fallback?.generatedAt || ""),
   durationMs: Number(result?.durationMs || fallback?.durationMs || 0),
-  ...(result?.skipped ? { skipped: true } : {})
+  ...(result?.skipped ? { skipped: true } : {}),
+  ...(result?.reason ? { reason: String(result.reason) } : {})
 });
 
-const todayIso = () => new Date().toISOString().slice(0, 10);
+const istIsoDate = (offsetDays = 0) => {
+  const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  istNow.setUTCDate(istNow.getUTCDate() + offsetDays);
+  return istNow.toISOString().slice(0, 10);
+};
 
-const shouldSkipRedundantNavUpdate = (snapshot) => (
-  String(snapshot?.latestDate || "") === todayIso()
-  && Number(snapshot?.count || 0) > 1000
-);
+const isGeneratedWithinHours = (value, hours) => {
+  const generatedAt = new Date(value || "");
+  if (Number.isNaN(generatedAt.getTime())) return false;
+  return Date.now() - generatedAt.getTime() <= hours * 60 * 60 * 1000;
+};
+
+const shouldSkipRedundantNavUpdate = (snapshot) => {
+  const latestDate = String(snapshot?.latestDate || "");
+  return (latestDate === istIsoDate() || latestDate === istIsoDate(-1))
+    && Number(snapshot?.count || 0) > 1000
+    && isGeneratedWithinHours(snapshot?.generatedAt, 23);
+};
 
 async function handleNavUpdateRequest(_req, res) {
   const startedAt = Date.now();
@@ -61,19 +83,20 @@ async function handleNavUpdateRequest(_req, res) {
 
     const existing = readSnapshotFile();
     if (shouldSkipRedundantNavUpdate(existing)) {
-      return res.json(summariseNavUpdate({
-        status: "no-new-nav",
+      return res.status(200).json(safeResponse({
+        status: "skipped",
         latestDate: existing.latestDate,
-        count: existing.count,
+        count: existing.count || 0,
         generatedAt: existing.generatedAt,
         durationMs: Date.now() - startedAt,
-        skipped: true
+        skipped: true,
+        reason: "already fresh for today"
       }));
     }
 
     const result = await triggerNavUpdate();
     const updated = readSnapshotFile();
-    return res.json(summariseNavUpdate(result, {
+    return res.status(200).json(summariseNavUpdate(result, {
       latestDate: updated.latestDate,
       count: updated.count,
       generatedAt: updated.generatedAt,
@@ -81,14 +104,14 @@ async function handleNavUpdateRequest(_req, res) {
     }));
   } catch (error) {
     logger.error("NAV update trigger failed", error?.message || error);
-    return res.status(500).json({
+    return res.status(500).json(safeResponse({
       status: "error",
       latestDate: "",
       count: 0,
       generatedAt: "",
       durationMs: Date.now() - startedAt,
       error: String(error?.message || "NAV update failed")
-    });
+    }));
   }
 }
 
