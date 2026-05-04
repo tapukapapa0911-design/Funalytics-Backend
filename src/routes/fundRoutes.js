@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,24 +61,16 @@ const summariseNavUpdate = (result = {}, fallback = {}) => safeResponse({
   ...(result?.reason ? { reason: String(result.reason) } : {})
 });
 
-const istIsoDate = (offsetDays = 0) => {
-  const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
-  istNow.setUTCDate(istNow.getUTCDate() + offsetDays);
-  return istNow.toISOString().slice(0, 10);
-};
-
 const isGeneratedWithinHours = (value, hours) => {
   const generatedAt = new Date(value || "");
   if (Number.isNaN(generatedAt.getTime())) return false;
   return Date.now() - generatedAt.getTime() <= hours * 60 * 60 * 1000;
 };
 
-const shouldSkipRedundantNavUpdate = (snapshot) => {
-  const latestDate = String(snapshot?.latestDate || "");
-  return (latestDate === istIsoDate() || latestDate === istIsoDate(-1))
-    && Number(snapshot?.count || 0) >= MIN_FULL_NAV_ROWS
-    && isGeneratedWithinHours(snapshot?.generatedAt, 23);
-};
+const shouldSkipRedundantNavUpdate = (snapshot) => (
+  Number(snapshot?.count || 0) >= MIN_FULL_NAV_ROWS
+  && isGeneratedWithinHours(snapshot?.generatedAt, 20)
+);
 
 async function handleNavUpdateRequest(_req, res) {
   const startedAt = Date.now();
@@ -100,7 +92,7 @@ async function handleNavUpdateRequest(_req, res) {
         generatedAt: existing.generatedAt,
         durationMs: Date.now() - startedAt,
         skipped: true,
-        reason: "already fresh for today"
+        reason: "snapshot generated within last 20 hours"
       }));
     }
 
@@ -314,7 +306,8 @@ router.get("/api/cron", async (_req, res, next) => {
         count: existing.count,
         generatedAt: existing.generatedAt,
         durationMs: Date.now() - startedAt,
-        skipped: true
+        skipped: true,
+        reason: "snapshot generated within last 20 hours"
       }));
     }
 
