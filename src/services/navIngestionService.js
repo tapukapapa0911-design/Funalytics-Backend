@@ -1,13 +1,21 @@
 import { fetchAmfiNavFeed } from "./amfiService.js";
-import { getLatestNavDate, saveNavRecords } from "./navStore.js";
+import { saveNavRecords } from "./navStore.js";
+import { readSnapshotFile } from "./snapshotStore.js";
 import { logger } from "../utils/logger.js";
 
 const MIN_FULL_NAV_ROWS = 12000;
+const SNAPSHOT_FRESH_WINDOW_MS = 20 * 60 * 60 * 1000;
 
 function toDateKey(value) {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+}
+
+function isGeneratedRecently(value) {
+  const generatedAt = new Date(value || "");
+  if (Number.isNaN(generatedAt.getTime())) return false;
+  return Date.now() - generatedAt.getTime() <= SNAPSHOT_FRESH_WINDOW_MS;
 }
 
 export async function runNavIngestion(options = {}) {
@@ -17,6 +25,24 @@ export async function runNavIngestion(options = {}) {
     ? Math.floor(Number(options.minRows))
     : MIN_FULL_NAV_ROWS;
   const force = options?.force === true;
+
+  if (!force) {
+    const existingSnapshot = readSnapshotFile();
+    if (isGeneratedRecently(existingSnapshot?.generatedAt)) {
+      const summary = {
+        source: "amfi",
+        status: "no-new-nav",
+        count: Number(existingSnapshot?.count || 0),
+        processed: 0,
+        latestDate: String(existingSnapshot?.latestDate || ""),
+        generatedAt: String(existingSnapshot?.generatedAt || ""),
+        durationMs: Date.now() - startedAt
+      };
+      logger.info("Existing NAV snapshot generated within last 20 hours", summary);
+      return summary;
+    }
+  }
+
   const records = await fetchAmfiNavFeed();
   if (!records.length) {
     throw new Error("AMFI feed returned no NAV rows");
@@ -38,21 +64,6 @@ export async function runNavIngestion(options = {}) {
       durationMs: Date.now() - startedAt
     };
     logger.warn(`AMFI partial NAV feed rejected: ${records.length} rows fetched, minimum ${minRows} required`, summary);
-    return summary;
-  }
-
-  const existingLatestDate = await getLatestNavDate();
-
-  if (!force && incomingLatestDate && existingLatestDate && incomingLatestDate <= existingLatestDate) {
-    const summary = {
-      source: "amfi",
-      status: "no-new-nav",
-      processed: records.length,
-      latestDate: existingLatestDate,
-      fetchedDate: incomingLatestDate,
-      durationMs: Date.now() - startedAt
-    };
-    logger.info("No new NAV available from AMFI", summary);
     return summary;
   }
 

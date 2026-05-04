@@ -29,6 +29,18 @@ export async function triggerNavUpdate(options = {}) {
       minRows: effectiveMinRows
     });
     console.log("NAV fetch complete");
+    if (ingestionResult?.status === "no-new-nav") {
+      const resultObject = {
+        status: "no-new-nav",
+        latestDate: String(ingestionResult?.latestDate || ""),
+        count: Number(ingestionResult?.count || ingestionResult?.processed || 0),
+        generatedAt: String(ingestionResult?.generatedAt || ""),
+        durationMs: Date.now() - startedAt
+      };
+      logger.info("NAV snapshot write skipped because existing snapshot is fresh", resultObject);
+      return resultObject;
+    }
+
     if (ingestionResult?.status === "partial-rejected") {
       const resultObject = {
         status: "partial-rejected",
