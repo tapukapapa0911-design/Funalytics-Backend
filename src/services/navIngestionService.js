@@ -10,9 +10,12 @@ function toDateKey(value) {
   return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
 }
 
-export async function runNavIngestion() {
+export async function runNavIngestion(options = {}) {
   logger.info("NAV ingestion started");
   const startedAt = Date.now();
+  const minRows = Number.isFinite(Number(options?.minRows)) && Number(options.minRows) > 0
+    ? Math.floor(Number(options.minRows))
+    : MIN_FULL_NAV_ROWS;
   const records = await fetchAmfiNavFeed();
   if (!records.length) {
     throw new Error("AMFI feed returned no NAV rows");
@@ -24,7 +27,7 @@ export async function runNavIngestion() {
     .sort()
     .at(-1) || "";
 
-  if (records.length < MIN_FULL_NAV_ROWS) {
+  if (records.length < minRows) {
     const summary = {
       source: "amfi",
       status: "partial-rejected",
@@ -33,7 +36,7 @@ export async function runNavIngestion() {
       latestDate: incomingLatestDate,
       durationMs: Date.now() - startedAt
     };
-    logger.warn(`AMFI partial NAV feed rejected: ${records.length} rows fetched, minimum ${MIN_FULL_NAV_ROWS} required`, summary);
+    logger.warn(`AMFI partial NAV feed rejected: ${records.length} rows fetched, minimum ${minRows} required`, summary);
     return summary;
   }
 

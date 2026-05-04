@@ -6,8 +6,11 @@ import { buildLiveSnapshotPayload, clearResponseCache } from "../routes/fundRout
 const MIN_FULL_NAV_ROWS = 12000;
 let running = false;
 
-export async function triggerNavUpdate() {
+export async function triggerNavUpdate(options = {}) {
   const startedAt = Date.now();
+  const effectiveMinRows = Number.isFinite(Number(options?.minRows)) && Number(options.minRows) > 0
+    ? Math.floor(Number(options.minRows))
+    : MIN_FULL_NAV_ROWS;
   if (running) {
     logger.warn("NAV update skipped because a run is already in progress");
     return {
@@ -21,7 +24,7 @@ export async function triggerNavUpdate() {
   running = true;
   try {
     logger.info("NAV update started");
-    const ingestionResult = await runNavIngestion();
+    const ingestionResult = await runNavIngestion({ minRows: effectiveMinRows });
     console.log("NAV fetch complete");
     if (ingestionResult?.status === "partial-rejected") {
       const resultObject = {
@@ -37,7 +40,7 @@ export async function triggerNavUpdate() {
 
     const snapshotPayload = await buildLiveSnapshotPayload();
     const snapshotCount = Number(snapshotPayload?.count || (Array.isArray(snapshotPayload?.items) ? snapshotPayload.items.length : 0) || 0);
-    if (snapshotCount < MIN_FULL_NAV_ROWS) {
+    if (snapshotCount < effectiveMinRows) {
       const resultObject = {
         status: "partial-rejected",
         latestDate: String(snapshotPayload?.latestDate || ingestionResult?.latestDate || ""),
@@ -45,7 +48,7 @@ export async function triggerNavUpdate() {
         generatedAt: new Date().toISOString(),
         durationMs: Date.now() - startedAt
       };
-      logger.warn(`NAV snapshot write skipped: ${snapshotCount} rows available, minimum ${MIN_FULL_NAV_ROWS} required`, resultObject);
+      logger.warn(`NAV snapshot write skipped: ${snapshotCount} rows available, minimum ${effectiveMinRows} required`, resultObject);
       return resultObject;
     }
 

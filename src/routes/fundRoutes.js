@@ -87,6 +87,10 @@ async function handleNavUpdateRequest(_req, res) {
 
     const force = _req?.body?.force === true
       || String(_req?.query?.force || "").toLowerCase() === "true";
+    const requestedMinRows = Number(_req?.body?.minRows);
+    const minRows = force && Number.isFinite(requestedMinRows) && requestedMinRows > 0
+      ? Math.floor(requestedMinRows)
+      : MIN_FULL_NAV_ROWS;
     const existing = readSnapshotFile();
     if (!force && shouldSkipRedundantNavUpdate(existing)) {
       return res.status(200).json(safeResponse({
@@ -100,7 +104,7 @@ async function handleNavUpdateRequest(_req, res) {
       }));
     }
 
-    const result = await triggerNavUpdate();
+    const result = await triggerNavUpdate({ force, minRows });
     const updated = readSnapshotFile();
     return res.status(200).json(summariseNavUpdate(result, {
       latestDate: updated.latestDate,
