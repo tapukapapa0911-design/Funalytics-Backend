@@ -16,6 +16,7 @@ export async function runNavIngestion(options = {}) {
   const minRows = Number.isFinite(Number(options?.minRows)) && Number(options.minRows) > 0
     ? Math.floor(Number(options.minRows))
     : MIN_FULL_NAV_ROWS;
+  const force = options?.force === true;
   const records = await fetchAmfiNavFeed();
   if (!records.length) {
     throw new Error("AMFI feed returned no NAV rows");
@@ -42,7 +43,7 @@ export async function runNavIngestion(options = {}) {
 
   const existingLatestDate = await getLatestNavDate();
 
-  if (incomingLatestDate && existingLatestDate && incomingLatestDate <= existingLatestDate) {
+  if (!force && incomingLatestDate && existingLatestDate && incomingLatestDate <= existingLatestDate) {
     const summary = {
       source: "amfi",
       status: "no-new-nav",

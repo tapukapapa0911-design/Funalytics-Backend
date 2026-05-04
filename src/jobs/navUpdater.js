@@ -24,7 +24,10 @@ export async function triggerNavUpdate(options = {}) {
   running = true;
   try {
     logger.info("NAV update started");
-    const ingestionResult = await runNavIngestion({ minRows: effectiveMinRows });
+    const ingestionResult = await runNavIngestion({
+      force: options?.force === true,
+      minRows: effectiveMinRows
+    });
     console.log("NAV fetch complete");
     if (ingestionResult?.status === "partial-rejected") {
       const resultObject = {
