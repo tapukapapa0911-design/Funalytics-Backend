@@ -2,6 +2,8 @@ import { fetchAmfiNavFeed } from "./amfiService.js";
 import { getLatestNavDate, saveNavRecords } from "./navStore.js";
 import { logger } from "../utils/logger.js";
 
+const MIN_FULL_NAV_ROWS = 12000;
+
 function toDateKey(value) {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
@@ -21,6 +23,19 @@ export async function runNavIngestion() {
     .filter(Boolean)
     .sort()
     .at(-1) || "";
+
+  if (records.length < MIN_FULL_NAV_ROWS) {
+    const summary = {
+      source: "amfi",
+      status: "partial-rejected",
+      count: records.length,
+      processed: records.length,
+      latestDate: incomingLatestDate,
+      durationMs: Date.now() - startedAt
+    };
+    logger.warn(`AMFI partial NAV feed rejected: ${records.length} rows fetched, minimum ${MIN_FULL_NAV_ROWS} required`, summary);
+    return summary;
+  }
 
   const existingLatestDate = await getLatestNavDate();
 

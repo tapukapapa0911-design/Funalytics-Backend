@@ -3,6 +3,7 @@ import { writeSnapshotFile } from "../services/snapshotStore.js";
 import { logger } from "../utils/logger.js";
 import { buildLiveSnapshotPayload, clearResponseCache } from "../routes/fundRoutes.js";
 
+const MIN_FULL_NAV_ROWS = 12000;
 let running = false;
 
 export async function triggerNavUpdate() {
@@ -22,7 +23,33 @@ export async function triggerNavUpdate() {
     logger.info("NAV update started");
     const ingestionResult = await runNavIngestion();
     console.log("NAV fetch complete");
-    const snapshot = writeSnapshotFile(await buildLiveSnapshotPayload());
+    if (ingestionResult?.status === "partial-rejected") {
+      const resultObject = {
+        status: "partial-rejected",
+        latestDate: String(ingestionResult?.latestDate || ""),
+        count: Number(ingestionResult?.count || ingestionResult?.processed || 0),
+        generatedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedAt
+      };
+      logger.warn("NAV snapshot write skipped because AMFI feed was partial", resultObject);
+      return resultObject;
+    }
+
+    const snapshotPayload = await buildLiveSnapshotPayload();
+    const snapshotCount = Number(snapshotPayload?.count || (Array.isArray(snapshotPayload?.items) ? snapshotPayload.items.length : 0) || 0);
+    if (snapshotCount < MIN_FULL_NAV_ROWS) {
+      const resultObject = {
+        status: "partial-rejected",
+        latestDate: String(snapshotPayload?.latestDate || ingestionResult?.latestDate || ""),
+        count: snapshotCount,
+        generatedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedAt
+      };
+      logger.warn(`NAV snapshot write skipped: ${snapshotCount} rows available, minimum ${MIN_FULL_NAV_ROWS} required`, resultObject);
+      return resultObject;
+    }
+
+    const snapshot = writeSnapshotFile(snapshotPayload);
     clearResponseCache();
     logger.info("NAV updated successfully");
     const resultObject = {

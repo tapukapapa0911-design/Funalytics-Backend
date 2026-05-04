@@ -14,6 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const backupJsonPath = path.resolve(__dirname, "../../../mockData/excel-backup.json");
 let appFundLookupPromise = null;
+const MIN_FULL_NAV_ROWS = 12000;
 
 function getCached(key) {
   const entry = responseCache.get(key);
@@ -35,7 +36,10 @@ function setCached(key, payload, ttlMs = env.cacheTtlMs) {
 const safeResponse = (obj) => {
   const out = {};
   for (const [key, value] of Object.entries(obj || {})) {
-    if (!Array.isArray(value)) out[key] = value;
+    if (Array.isArray(value)) continue;
+    if (value === null || ["string", "number", "boolean"].includes(typeof value)) {
+      out[key] = value;
+    }
   }
   if (typeof obj?.items?.length === "number") out.count = obj.items.length;
   return out;
@@ -53,7 +57,7 @@ const summariseNavUpdate = (result = {}, fallback = {}) => safeResponse({
         : Number(fallback?.count || 0),
   generatedAt: String(result?.generatedAt || fallback?.generatedAt || ""),
   durationMs: Number(result?.durationMs || fallback?.durationMs || 0),
-  ...(result?.skipped ? { skipped: true } : {}),
+  skipped: Boolean(result?.skipped || fallback?.skipped || false),
   ...(result?.reason ? { reason: String(result.reason) } : {})
 });
 
@@ -72,7 +76,7 @@ const isGeneratedWithinHours = (value, hours) => {
 const shouldSkipRedundantNavUpdate = (snapshot) => {
   const latestDate = String(snapshot?.latestDate || "");
   return (latestDate === istIsoDate() || latestDate === istIsoDate(-1))
-    && Number(snapshot?.count || 0) > 1000
+    && Number(snapshot?.count || 0) >= MIN_FULL_NAV_ROWS
     && isGeneratedWithinHours(snapshot?.generatedAt, 23);
 };
 
@@ -81,8 +85,10 @@ async function handleNavUpdateRequest(_req, res) {
   try {
     logger.info("NAV update trigger received");
 
+    const force = _req?.body?.force === true
+      || String(_req?.query?.force || "").toLowerCase() === "true";
     const existing = readSnapshotFile();
-    if (shouldSkipRedundantNavUpdate(existing)) {
+    if (!force && shouldSkipRedundantNavUpdate(existing)) {
       return res.status(200).json(safeResponse({
         status: "skipped",
         latestDate: existing.latestDate,
@@ -100,7 +106,8 @@ async function handleNavUpdateRequest(_req, res) {
       latestDate: updated.latestDate,
       count: updated.count,
       generatedAt: updated.generatedAt,
-      durationMs: Date.now() - startedAt
+      durationMs: Date.now() - startedAt,
+      skipped: false
     }));
   } catch (error) {
     logger.error("NAV update trigger failed", error?.message || error);
