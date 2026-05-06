@@ -8,8 +8,15 @@ const SNAPSHOT_FRESH_WINDOW_MS = 20 * 60 * 60 * 1000;
 
 function toDateKey(value) {
   if (!value) return "";
+  const raw = String(value || "").trim();
+  const plainDate = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (plainDate) return `${plainDate[1]}-${plainDate[2]}-${plainDate[3]}`;
   const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function isGeneratedRecently(value) {

@@ -2,9 +2,6 @@ function parseAmfiDate(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
 
-  const parsed = new Date(raw);
-  if (!Number.isNaN(parsed.getTime())) return parsed;
-
   const [day, month, year] = raw.split(/[-/]/);
   const monthMap = {
     jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
@@ -15,6 +12,9 @@ function parseAmfiDate(value) {
     if (monthIndex !== undefined) return new Date(Date.UTC(Number(year), monthIndex, Number(day)));
     return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
   }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return parsed;
   return null;
 }
 

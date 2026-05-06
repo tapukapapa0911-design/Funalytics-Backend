@@ -161,8 +161,15 @@ const nameKeys = (value) => {
 
 const toIsoDate = (value) => {
   if (!value) return "";
+  const raw = String(value || "").trim();
+  const plainDate = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (plainDate) return `${plainDate[1]}-${plainDate[2]}-${plainDate[3]}`;
   const parsed = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const year = parsed.getUTCFullYear();
+  const month = String(parsed.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 };
 
 async function loadAppFundLookup() {
