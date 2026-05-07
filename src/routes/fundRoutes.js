@@ -207,7 +207,6 @@ async function loadAppFundLookup() {
 
 export async function buildLiveSnapshotPayload() {
   const allNavData = await getAllFunds();
-  console.log("AMFI total records:", allNavData.length);
   const items = allNavData
     .map((fund, index) => ({
       targetId: `amfi-${index + 1}`,
@@ -219,9 +218,6 @@ export async function buildLiveSnapshotPayload() {
       source: "amfi"
     }))
     .filter((row) => row.schemeCode && row.schemeName && row.date && Number.isFinite(row.nav));
-
-  console.log("Snapshot full AMFI count:", items.length);
-  console.log("Sample AMFI names:", items.slice(0, 10).map((fund) => fund.schemeName));
 
   const latestDate = items.reduce((latest, fund) => {
     const current = String(fund?.date || "");
@@ -240,6 +236,26 @@ export async function buildLiveSnapshotPayload() {
     items
   };
 }
+
+router.get("/nav-summary", async (_req, res, next) => {
+  try {
+    res.set("Cache-Control", "public, max-age=60");
+    const cached = getCached("nav-summary");
+    if (cached) return res.json(cached);
+    const payload = readSnapshotFile();
+    const summary = safeResponse({
+      latestDate: String(payload?.latestDate || ""),
+      lastFetchTimestamp: String(payload?.lastFetchTimestamp || ""),
+      generatedAt: String(payload?.generatedAt || ""),
+      count: Number(payload?.count || 0),
+      items: Array.isArray(payload?.items) ? payload.items : []
+    });
+    setCached("nav-summary", summary, 60 * 1000);
+    res.json(summary);
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get("/health", async (_req, res) => {
   res.json({ status: "ok" });

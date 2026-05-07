@@ -46,7 +46,6 @@ export function readSnapshotFile() {
 export function writeSnapshotFile(snapshot) {
   ensureSnapshotFile();
   const filteredFunds = Array.isArray(snapshot?.items) ? snapshot.items : [];
-  console.log("Filtered funds:", filteredFunds.length);
   const normalized = {
     generatedAt: new Date().toISOString(),
     latestDate: String(snapshot?.latestDate || ""),
@@ -56,7 +55,6 @@ export function writeSnapshotFile(snapshot) {
   };
   fs.writeFileSync(snapshotFilePath, JSON.stringify(normalized, null, 2), "utf8");
   logger.info(`NAV snapshot updated at ${snapshotFilePath} (${normalized.latestDate || "unknown-date"}, ${normalized.count} items)`);
-  console.log(`Snapshot saved with ${filteredFunds.length} funds`);
   return normalized;
 }
 

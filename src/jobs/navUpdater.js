@@ -28,7 +28,6 @@ export async function triggerNavUpdate(options = {}) {
       force: options?.force === true,
       minRows: effectiveMinRows
     });
-    console.log("NAV fetch complete");
     if (ingestionResult?.status === "no-new-nav") {
       const resultObject = {
         status: "no-new-nav",
@@ -77,7 +76,6 @@ export async function triggerNavUpdate(options = {}) {
       generatedAt: String(snapshot.generatedAt || ""),
       durationMs: Date.now() - startedAt
     };
-    console.log("Returning result", resultObject);
     return resultObject;
   } catch (error) {
     logger.error("NAV update failed", error?.message || error);
