@@ -23,3 +23,87 @@ services:
         value: 60000
       - key: MONGODB_URI
         sync: false
+  - type: cron
+    name: funalytics-nav-refresh-0100
+    runtime: node
+    rootDir: main app/backend
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm run ingest
+    schedule: "0 1 * * *"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TZ
+        value: Asia/Kolkata
+      - key: AMFI_URL
+        value: https://www.amfiindia.com/spages/NAVAll.txt
+      - key: REQUEST_TIMEOUT_MS
+        value: 15000
+      - key: CACHE_TTL_MS
+        value: 60000
+      - key: MONGODB_URI
+        sync: false
+  - type: cron
+    name: funalytics-nav-refresh-0130
+    runtime: node
+    rootDir: main app/backend
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm run ingest
+    schedule: "30 1 * * *"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TZ
+        value: Asia/Kolkata
+      - key: AMFI_URL
+        value: https://www.amfiindia.com/spages/NAVAll.txt
+      - key: REQUEST_TIMEOUT_MS
+        value: 15000
+      - key: CACHE_TTL_MS
+        value: 60000
+      - key: MONGODB_URI
+        sync: false
+  - type: cron
+    name: funalytics-nav-refresh-0200
+    runtime: node
+    rootDir: main app/backend
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm run ingest
+    schedule: "0 2 * * *"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TZ
+        value: Asia/Kolkata
+      - key: AMFI_URL
+        value: https://www.amfiindia.com/spages/NAVAll.txt
+      - key: REQUEST_TIMEOUT_MS
+        value: 15000
+      - key: CACHE_TTL_MS
+        value: 60000
+      - key: MONGODB_URI
+        sync: false
+  - type: cron
+    name: funalytics-nav-refresh-0230
+    runtime: node
+    rootDir: main app/backend
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm run ingest
+    schedule: "30 2 * * *"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TZ
+        value: Asia/Kolkata
+      - key: AMFI_URL
+        value: https://www.amfiindia.com/spages/NAVAll.txt
+      - key: REQUEST_TIMEOUT_MS
+        value: 15000
+      - key: CACHE_TTL_MS
+        value: 60000
+      - key: MONGODB_URI
+        sync: false

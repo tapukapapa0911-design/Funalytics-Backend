@@ -25,6 +25,19 @@ function isGeneratedRecently(value) {
   return Date.now() - generatedAt.getTime() <= SNAPSHOT_FRESH_WINDOW_MS;
 }
 
+function currentDisplayEligibleNavDate() {
+  const now = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  const cutoff = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() - 1
+  ));
+  const year = cutoff.getUTCFullYear();
+  const month = String(cutoff.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(cutoff.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export async function runNavIngestion(options = {}) {
   logger.info("NAV ingestion started");
   const startedAt = Date.now();
@@ -35,7 +48,10 @@ export async function runNavIngestion(options = {}) {
 
   if (!force) {
     const existingSnapshot = readSnapshotFile();
-    if (isGeneratedRecently(existingSnapshot?.generatedAt)) {
+    if (
+      isGeneratedRecently(existingSnapshot?.generatedAt)
+      && String(existingSnapshot?.latestDate || "") >= currentDisplayEligibleNavDate()
+    ) {
       const summary = {
         source: "amfi",
         status: "no-new-nav",

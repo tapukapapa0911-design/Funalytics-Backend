@@ -7,12 +7,12 @@
 
 ## Schedule
 
-- `00:00 IST` primary run
-- `00:15 IST` retry 1 if the midnight run failed
-- `00:30 IST` retry 2 if the prior run still failed
-- `06:00 IST` retry 3 if the overnight runs all failed
-- `06:15 IST` onward every 15 minutes until `23:45 IST` if the `06:00 IST` run also failed
+- `01:00 IST` primary run
+- `01:30 IST` retry 1 if the first run failed
+- `02:00 IST` retry 2 if the prior run still failed
+- `02:30 IST` retry 3 if the prior run still failed
 
+Disable older `11:00 PM` / `11:30 PM` cron entries after moving to this schedule.
 Retries stop as soon as one run succeeds or AMFI returns "no new NAV available".
 
 ## Snapshot flow

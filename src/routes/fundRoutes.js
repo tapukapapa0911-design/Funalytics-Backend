@@ -67,9 +67,29 @@ const isGeneratedWithinHours = (value, hours) => {
   return Date.now() - generatedAt.getTime() <= hours * 60 * 60 * 1000;
 };
 
+const navFreshnessTimestamp = (snapshot = {}) => String(
+  snapshot?.lastFetchTimestamp
+  || snapshot?.generatedAt
+  || ""
+);
+
+const currentDisplayEligibleNavDate = () => {
+  const now = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  const cutoff = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() - 1
+  ));
+  const year = cutoff.getUTCFullYear();
+  const month = String(cutoff.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(cutoff.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const shouldSkipRedundantNavUpdate = (snapshot) => (
   Number(snapshot?.count || 0) >= MIN_FULL_NAV_ROWS
-  && isGeneratedWithinHours(snapshot?.generatedAt, 20)
+  && isGeneratedWithinHours(navFreshnessTimestamp(snapshot), 20)
+  && String(snapshot?.latestDate || "") >= currentDisplayEligibleNavDate()
 );
 
 async function handleNavUpdateRequest(_req, res) {
@@ -83,7 +103,7 @@ async function handleNavUpdateRequest(_req, res) {
     const minRows = force && Number.isFinite(requestedMinRows) && requestedMinRows > 0
       ? Math.floor(requestedMinRows)
       : MIN_FULL_NAV_ROWS;
-    const existing = readSnapshotFile();
+    const existing = await getLiveSnapshotPayload();
     if (!force && shouldSkipRedundantNavUpdate(existing)) {
       return res.status(200).json(safeResponse({
         status: "skipped",
@@ -97,7 +117,7 @@ async function handleNavUpdateRequest(_req, res) {
     }
 
     const result = await triggerNavUpdate({ force, minRows });
-    const updated = readSnapshotFile();
+    const updated = await getLiveSnapshotPayload();
     return res.status(200).json(summariseNavUpdate(result, {
       latestDate: updated.latestDate,
       count: updated.count,
@@ -237,12 +257,21 @@ export async function buildLiveSnapshotPayload() {
   };
 }
 
+async function getLiveSnapshotPayload() {
+  try {
+    return await buildLiveSnapshotPayload();
+  } catch (error) {
+    logger.warn("Falling back to stored snapshot file", error?.message || error);
+    return readSnapshotFile();
+  }
+}
+
 router.get("/nav-summary", async (_req, res, next) => {
   try {
     res.set("Cache-Control", "public, max-age=60");
     const cached = getCached("nav-summary");
     if (cached) return res.json(cached);
-    const payload = readSnapshotFile();
+    const payload = await getLiveSnapshotPayload();
     const summary = safeResponse({
       latestDate: String(payload?.latestDate || ""),
       lastFetchTimestamp: String(payload?.lastFetchTimestamp || ""),
@@ -276,7 +305,10 @@ router.post("/update-nav", handleNavUpdateRequest);
 router.get("/nav", async (_req, res, next) => {
   try {
     res.set("Cache-Control", "public, max-age=60");
-    const data = readSnapshotFile();
+    const cached = getCached("nav");
+    if (cached) return res.json(cached);
+    const data = await getLiveSnapshotPayload();
+    setCached("nav", data, 60 * 1000);
     res.json(data);
   } catch (error) {
     next(error);
@@ -310,7 +342,7 @@ router.get("/api/snapshot", async (_req, res, next) => {
     res.set("Cache-Control", "public, max-age=60");
     const cached = getCached("snapshot");
     if (cached) return res.json(cached);
-    const payload = readSnapshotFile();
+    const payload = await getLiveSnapshotPayload();
     setCached("snapshot", payload, 15 * 60 * 1000);
     res.json(payload);
   } catch (error) {
@@ -321,7 +353,7 @@ router.get("/api/snapshot", async (_req, res, next) => {
 router.get("/api/cron", async (_req, res, next) => {
   const startedAt = Date.now();
   try {
-    const existing = readSnapshotFile();
+    const existing = await getLiveSnapshotPayload();
     if (shouldSkipRedundantNavUpdate(existing)) {
       return res.json(summariseNavUpdate({
         status: "no-new-nav",
@@ -335,7 +367,7 @@ router.get("/api/cron", async (_req, res, next) => {
     }
 
     const result = await triggerNavUpdate();
-    const updated = readSnapshotFile();
+    const updated = await getLiveSnapshotPayload();
     res.json(summariseNavUpdate(result, {
       latestDate: updated.latestDate,
       count: updated.count,

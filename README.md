@@ -9,8 +9,8 @@ This backend lives entirely inside `live-data-version/` and powers the live NAV 
 - MongoDB bulk upserts keyed by `schemeCode`
 - Retry + logging
 - REST API for the live frontend
-- Daily cron at `12:00 AM IST`
-- Retries at `12:15 AM`, `12:30 AM`, `06:00 AM`, then every 15 minutes until end of day if needed
+- Daily cron starts at `01:00 AM IST`
+- Retries at `01:30 AM`, `02:00 AM`, and `02:30 AM` if needed
 
 ## Setup
 
@@ -27,6 +27,7 @@ This backend lives entirely inside `live-data-version/` and powers the live NAV 
 - `GET /funds`
 - `GET /api/snapshot`
 - `GET /api/cron`
+- `GET /nav-summary`
 - `GET /fund/:schemeCode`
 - `GET /search?q=keyword`
 - `GET /meta/last-updated`
@@ -54,6 +55,5 @@ Deployment files included:
 The app already:
 
 - respects `PORT`
-- starts cron automatically on boot
 - runs an initial NAV update on startup
 - uses environment-driven MongoDB configuration

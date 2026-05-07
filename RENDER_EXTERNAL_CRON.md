@@ -9,11 +9,12 @@ Render + cron-job.org setup
    `https://YOUR-RENDER-URL/update-nav`
 
 Recommended cron-job.org schedule (Asia/Kolkata):
-- 00:00
-- 00:15
-- 00:30
-- 06:00
-- every 15 minutes from 06:15 to 23:45 only if you want aggressive retry coverage
+- 01:00
+- 01:30
+- 02:00
+- 02:30
+
+Do not keep older 11 PM / 11:30 PM jobs enabled once these 1 AM onward jobs are active.
 
 Useful checks:
 - `/health` -> basic uptime check
