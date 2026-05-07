@@ -1,5 +1,5 @@
 import { fetchAmfiNavFeed } from "./amfiService.js";
-import { saveNavRecords } from "./navStore.js";
+import { getLatestNavDate, saveNavRecords } from "./navStore.js";
 import { readSnapshotFile } from "./snapshotStore.js";
 import { logger } from "../utils/logger.js";
 
@@ -32,6 +32,9 @@ function currentDisplayEligibleNavDate() {
     now.getUTCMonth(),
     now.getUTCDate() - 1
   ));
+  while (cutoff.getUTCDay() === 0 || cutoff.getUTCDay() === 6) {
+    cutoff.setUTCDate(cutoff.getUTCDate() - 1);
+  }
   const year = cutoff.getUTCFullYear();
   const month = String(cutoff.getUTCMonth() + 1).padStart(2, "0");
   const day = String(cutoff.getUTCDate()).padStart(2, "0");
@@ -48,16 +51,21 @@ export async function runNavIngestion(options = {}) {
 
   if (!force) {
     const existingSnapshot = readSnapshotFile();
+    const liveLatestDate = await getLatestNavDate();
+    const latestAvailableDate = [String(existingSnapshot?.latestDate || ""), String(liveLatestDate || "")]
+      .filter(Boolean)
+      .sort()
+      .at(-1) || "";
     if (
       isGeneratedRecently(existingSnapshot?.generatedAt)
-      && String(existingSnapshot?.latestDate || "") >= currentDisplayEligibleNavDate()
+      && latestAvailableDate >= currentDisplayEligibleNavDate()
     ) {
       const summary = {
         source: "amfi",
         status: "no-new-nav",
         count: Number(existingSnapshot?.count || 0),
         processed: 0,
-        latestDate: String(existingSnapshot?.latestDate || ""),
+        latestDate: latestAvailableDate,
         generatedAt: String(existingSnapshot?.generatedAt || ""),
         durationMs: Date.now() - startedAt
       };
@@ -71,11 +79,33 @@ export async function runNavIngestion(options = {}) {
     throw new Error("AMFI feed returned no NAV rows");
   }
 
+  const existingLiveLatestDate = await getLatestNavDate();
   const incomingLatestDate = records
     .map((record) => toDateKey(record.navDate))
     .filter(Boolean)
     .sort()
     .at(-1) || "";
+
+  if (
+    existingLiveLatestDate
+    && incomingLatestDate
+    && incomingLatestDate < existingLiveLatestDate
+  ) {
+    const summary = {
+      source: "amfi",
+      status: "stale-rejected",
+      count: records.length,
+      processed: records.length,
+      latestDate: existingLiveLatestDate,
+      incomingLatestDate,
+      durationMs: Date.now() - startedAt
+    };
+    logger.warn(
+      `AMFI snapshot rejected because it would regress NAV date from ${existingLiveLatestDate} to ${incomingLatestDate}`,
+      summary
+    );
+    return summary;
+  }
 
   if (records.length < minRows) {
     const summary = {

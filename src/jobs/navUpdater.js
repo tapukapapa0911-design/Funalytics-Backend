@@ -52,6 +52,18 @@ export async function triggerNavUpdate(options = {}) {
       return resultObject;
     }
 
+    if (ingestionResult?.status === "stale-rejected") {
+      const resultObject = {
+        status: "stale-rejected",
+        latestDate: String(ingestionResult?.latestDate || ""),
+        count: Number(ingestionResult?.count || ingestionResult?.processed || 0),
+        generatedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedAt
+      };
+      logger.warn("NAV snapshot write skipped because incoming AMFI feed was older than stored NAV data", resultObject);
+      return resultObject;
+    }
+
     const snapshotPayload = await buildLiveSnapshotPayload();
     const snapshotCount = Number(snapshotPayload?.count || (Array.isArray(snapshotPayload?.items) ? snapshotPayload.items.length : 0) || 0);
     if (snapshotCount < effectiveMinRows) {

@@ -58,7 +58,8 @@ const summariseNavUpdate = (result = {}, fallback = {}) => safeResponse({
   generatedAt: String(result?.generatedAt || fallback?.generatedAt || ""),
   durationMs: Number(result?.durationMs || fallback?.durationMs || 0),
   skipped: Boolean(result?.skipped || fallback?.skipped || false),
-  ...(result?.reason ? { reason: String(result.reason) } : {})
+  ...(result?.reason ? { reason: String(result.reason) } : {}),
+  ...(result?.incomingLatestDate ? { incomingLatestDate: String(result.incomingLatestDate) } : {})
 });
 
 const isGeneratedWithinHours = (value, hours) => {
@@ -80,6 +81,9 @@ const currentDisplayEligibleNavDate = () => {
     now.getUTCMonth(),
     now.getUTCDate() - 1
   ));
+  while (cutoff.getUTCDay() === 0 || cutoff.getUTCDay() === 6) {
+    cutoff.setUTCDate(cutoff.getUTCDate() - 1);
+  }
   const year = cutoff.getUTCFullYear();
   const month = String(cutoff.getUTCMonth() + 1).padStart(2, "0");
   const day = String(cutoff.getUTCDate()).padStart(2, "0");
