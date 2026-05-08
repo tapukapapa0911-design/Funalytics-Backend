@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { env } from "../config/env.js";
 import { findFundBySchemeCode, getAllFunds, getFundCount, getLatestFund, searchFunds } from "../services/navStore.js";
-import { triggerNavUpdate } from "../jobs/navUpdater.js";
+import { syncNavData, triggerNavUpdate } from "../jobs/navUpdater.js";
 import { readSnapshotFile } from "../services/snapshotStore.js";
 import { logger } from "../utils/logger.js";
 
@@ -139,6 +139,59 @@ async function handleNavUpdateRequest(_req, res) {
       durationMs: Date.now() - startedAt,
       error: String(error?.message || "NAV update failed")
     }));
+  }
+}
+
+function isAuthorizedCronRequest(req) {
+  const configured = env.navCronToken;
+  if (!configured) return true;
+  const headerToken = String(
+    req.get("x-cron-token")
+    || req.get("x-nav-cron-token")
+    || req.get("authorization")?.replace(/^Bearer\s+/i, "")
+    || ""
+  ).trim();
+  const queryToken = String(req.query?.token || "").trim();
+  return headerToken === configured || queryToken === configured;
+}
+
+async function handleCronNavSync(req, res) {
+  const startedAt = Date.now();
+  if (!isAuthorizedCronRequest(req)) {
+    return res.status(401).json({
+      success: false,
+      status: "unauthorized",
+      duration: "0.0s"
+    });
+  }
+  try {
+    const result = await syncNavData({
+      force: String(req.query?.force || "").toLowerCase() === "true"
+    });
+    return res.status(result.status === "running" ? 202 : 200).json({
+      success: result.success,
+      status: result.status,
+      fetched: result.fetched,
+      matched: result.matched,
+      updated: result.updated,
+      failed: result.failed,
+      latestDate: result.latestDate,
+      duration: result.duration
+    });
+  } catch (error) {
+    logger.error("cron-nav-sync-route-failed", {
+      error: String(error?.message || error),
+      durationMs: Date.now() - startedAt
+    });
+    return res.status(500).json({
+      success: false,
+      status: "error",
+      fetched: 0,
+      matched: 0,
+      updated: 0,
+      failed: 0,
+      duration: `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
+    });
   }
 }
 
@@ -305,6 +358,7 @@ router.get("/meta/last-updated", async (_req, res) => {
 
 router.get("/update-nav", handleNavUpdateRequest);
 router.post("/update-nav", handleNavUpdateRequest);
+router.get("/cron/nav-sync", handleCronNavSync);
 
 router.get("/nav", async (_req, res, next) => {
   try {

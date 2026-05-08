@@ -8,5 +8,7 @@ export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   amfiUrl: process.env.AMFI_URL || "https://www.amfiindia.com/spages/NAVAll.txt",
   requestTimeoutMs: Number(process.env.REQUEST_TIMEOUT_MS || 10000),
-  cacheTtlMs: Number(process.env.CACHE_TTL_MS || 60000)
+  cacheTtlMs: Number(process.env.CACHE_TTL_MS || 60000),
+  navCronToken: String(process.env.NAV_CRON_TOKEN || "").trim(),
+  navBulkBatchSize: Math.max(100, Number(process.env.NAV_BULK_BATCH_SIZE || 1000))
 };

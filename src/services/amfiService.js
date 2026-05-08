@@ -15,6 +15,19 @@ export async function fetchAmfiNavFeed() {
         "User-Agent": "Funalytics-Live-Backend/1.0"
       }
     });
-    return parseNavAllText(response.data);
+    const rawText = String(response.data || "");
+    const totalRows = rawText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => /^\d+;/.test(line))
+      .length;
+    const records = parseNavAllText(rawText);
+    return {
+      records,
+      fetched: totalRows,
+      matched: records.length,
+      failed: Math.max(0, totalRows - records.length)
+    };
   }, { retries: 3, baseDelayMs: 750 });
 }

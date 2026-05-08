@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import mongoose from "mongoose";
 import { Fund } from "../models/Fund.js";
+import { env } from "../config/env.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +39,10 @@ async function readFileCache() {
   } catch {
     return { latestDate: "", updatedAt: "", items: [] };
   }
+}
+
+export async function readNavCachePayload() {
+  return readFileCache();
 }
 
 async function writeFileCache(items = []) {
@@ -84,6 +89,14 @@ function buildBulkOperations(records) {
   }));
 }
 
+function chunkRecords(records, size) {
+  const chunks = [];
+  for (let index = 0; index < records.length; index += size) {
+    chunks.push(records.slice(index, index + size));
+  }
+  return chunks;
+}
+
 export async function getAllFunds() {
   if (isDbReady()) {
     return Fund.find({}).sort({ schemeName: 1 }).lean();
@@ -121,10 +134,19 @@ export async function getLatestNavDate() {
 
 export async function saveNavRecords(records = []) {
   if (isDbReady()) {
-    const bulkResult = await Fund.bulkWrite(buildBulkOperations(records), { ordered: false });
-    const items = await Fund.find({}).sort({ schemeName: 1 }).lean();
-    await writeFileCache(items);
-    return bulkResult;
+    const chunks = chunkRecords(records, env.navBulkBatchSize);
+    let upsertedCount = 0;
+    let modifiedCount = 0;
+    for (const chunk of chunks) {
+      const bulkResult = await Fund.bulkWrite(buildBulkOperations(chunk), { ordered: false });
+      upsertedCount += Number(bulkResult?.upsertedCount || 0);
+      modifiedCount += Number(bulkResult?.modifiedCount || 0);
+    }
+    await writeFileCache(records);
+    return {
+      upsertedCount,
+      modifiedCount
+    };
   }
   const nowIso = new Date().toISOString();
   const items = records.map((record) => ({
