@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { env } from "../config/env.js";
 import { findFundBySchemeCode, getAllFunds, getFundCount, getLatestFund, searchFunds } from "../services/navStore.js";
-import { syncNavData, triggerNavUpdate } from "../jobs/navUpdater.js";
+import { syncNavData } from "../jobs/navUpdater.js";
 import { readSnapshotFile } from "../services/snapshotStore.js";
 import { logger } from "../utils/logger.js";
 
@@ -15,6 +15,8 @@ const __dirname = path.dirname(__filename);
 const backupJsonPath = path.resolve(__dirname, "../../../mockData/excel-backup.json");
 let appFundLookupPromise = null;
 const MIN_FULL_NAV_ROWS = 12000;
+const UPDATE_NAV_ROUTE_COOLDOWN_MS = 60 * 1000;
+let lastUpdateNavRequestAt = 0;
 
 function getCached(key) {
   const entry = responseCache.get(key);
@@ -99,75 +101,43 @@ const shouldSkipRedundantNavUpdate = (snapshot) => (
 async function handleNavUpdateRequest(_req, res) {
   const startedAt = Date.now();
   try {
-    logger.info("NAV update trigger received");
+    if (_req.method !== "GET" && _req.method !== "POST") {
+      return res.status(405).json({
+        success: false,
+        status: "method-not-allowed",
+        duration: "0.0s"
+      });
+    }
 
     const force = _req?.body?.force === true
       || String(_req?.query?.force || "").toLowerCase() === "true";
+    const now = Date.now();
+    if (!force && lastUpdateNavRequestAt && (now - lastUpdateNavRequestAt) < UPDATE_NAV_ROUTE_COOLDOWN_MS) {
+      return res.status(200).json({
+        success: true,
+        status: "skipped",
+        updated: 0,
+        duration: `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
+      });
+    }
+    lastUpdateNavRequestAt = now;
     const requestedMinRows = Number(_req?.body?.minRows);
     const minRows = force && Number.isFinite(requestedMinRows) && requestedMinRows > 0
       ? Math.floor(requestedMinRows)
       : MIN_FULL_NAV_ROWS;
     const existing = await getLiveSnapshotPayload();
     if (!force && shouldSkipRedundantNavUpdate(existing)) {
-      return res.status(200).json(safeResponse({
+      return res.status(200).json({
+        success: true,
         status: "skipped",
+        updated: 0,
         latestDate: existing.latestDate,
-        count: existing.count || 0,
-        generatedAt: existing.generatedAt,
-        durationMs: Date.now() - startedAt,
-        skipped: true,
-        reason: "snapshot generated within last 20 hours"
-      }));
+        duration: `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
+      });
     }
 
-    const result = await triggerNavUpdate({ force, minRows });
+    const result = await syncNavData({ force, minRows });
     const updated = await getLiveSnapshotPayload();
-    return res.status(200).json(summariseNavUpdate(result, {
-      latestDate: updated.latestDate,
-      count: updated.count,
-      generatedAt: updated.generatedAt,
-      durationMs: Date.now() - startedAt,
-      skipped: false
-    }));
-  } catch (error) {
-    logger.error("NAV update trigger failed", error?.message || error);
-    return res.status(500).json(safeResponse({
-      status: "error",
-      latestDate: "",
-      count: 0,
-      generatedAt: "",
-      durationMs: Date.now() - startedAt,
-      error: String(error?.message || "NAV update failed")
-    }));
-  }
-}
-
-function isAuthorizedCronRequest(req) {
-  const configured = env.navCronToken;
-  if (!configured) return true;
-  const headerToken = String(
-    req.get("x-cron-token")
-    || req.get("x-nav-cron-token")
-    || req.get("authorization")?.replace(/^Bearer\s+/i, "")
-    || ""
-  ).trim();
-  const queryToken = String(req.query?.token || "").trim();
-  return headerToken === configured || queryToken === configured;
-}
-
-async function handleCronNavSync(req, res) {
-  const startedAt = Date.now();
-  if (!isAuthorizedCronRequest(req)) {
-    return res.status(401).json({
-      success: false,
-      status: "unauthorized",
-      duration: "0.0s"
-    });
-  }
-  try {
-    const result = await syncNavData({
-      force: String(req.query?.force || "").toLowerCase() === "true"
-    });
     return res.status(result.status === "running" ? 202 : 200).json({
       success: result.success,
       status: result.status,
@@ -175,14 +145,11 @@ async function handleCronNavSync(req, res) {
       matched: result.matched,
       updated: result.updated,
       failed: result.failed,
-      latestDate: result.latestDate,
-      duration: result.duration
+      latestDate: updated.latestDate || result.latestDate || "",
+      duration: result.duration || `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
     });
   } catch (error) {
-    logger.error("cron-nav-sync-route-failed", {
-      error: String(error?.message || error),
-      durationMs: Date.now() - startedAt
-    });
+    logger.error("NAV update trigger failed", error?.message || error);
     return res.status(500).json({
       success: false,
       status: "error",
@@ -356,9 +323,16 @@ router.get("/meta/last-updated", async (_req, res) => {
   });
 });
 
-router.get("/update-nav", handleNavUpdateRequest);
-router.post("/update-nav", handleNavUpdateRequest);
-router.get("/cron/nav-sync", handleCronNavSync);
+router.route("/update-nav")
+  .get(handleNavUpdateRequest)
+  .post(handleNavUpdateRequest)
+  .all((_req, res) => {
+    res.status(405).json({
+      success: false,
+      status: "method-not-allowed",
+      duration: "0.0s"
+    });
+  });
 
 router.get("/nav", async (_req, res, next) => {
   try {

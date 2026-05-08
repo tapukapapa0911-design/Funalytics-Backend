@@ -5,7 +5,9 @@ import { buildLiveSnapshotPayload, clearResponseCache } from "../routes/fundRout
 import { readNavCachePayload } from "../services/navStore.js";
 
 const MIN_FULL_NAV_ROWS = 12000;
+const NAV_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
 let running = false;
+let lastSyncFinishedAt = 0;
 
 function formatDuration(durationMs) {
   return `${(Number(durationMs || 0) / 1000).toFixed(1)}s`;
@@ -33,6 +35,7 @@ export async function syncNavData(options = {}) {
   const effectiveMinRows = Number.isFinite(Number(options?.minRows)) && Number(options.minRows) > 0
     ? Math.floor(Number(options.minRows))
     : MIN_FULL_NAV_ROWS;
+  const force = options?.force === true;
   if (running) {
     const summary = buildExecutionSummary({
       status: "running",
@@ -41,10 +44,18 @@ export async function syncNavData(options = {}) {
     logger.warn("nav-sync-already-running", summary);
     return summary;
   }
+  if (!force && lastSyncFinishedAt && (Date.now() - lastSyncFinishedAt) < NAV_SYNC_COOLDOWN_MS) {
+    const summary = buildExecutionSummary({
+      status: "skipped",
+      durationMs: Date.now() - startedAt
+    }, startedAt);
+    logger.info("nav-sync-cooldown-skip", summary);
+    return summary;
+  }
   running = true;
   try {
     const ingestionResult = await runNavIngestion({
-      force: options?.force === true,
+      force,
       minRows: effectiveMinRows
     });
     if (ingestionResult?.status === "no-new-nav") {
@@ -58,6 +69,7 @@ export async function syncNavData(options = {}) {
         durationMs: Date.now() - startedAt
       }, startedAt);
       logger.info("nav-sync-no-change", resultObject);
+      lastSyncFinishedAt = Date.now();
       return resultObject;
     }
 
@@ -72,6 +84,7 @@ export async function syncNavData(options = {}) {
         durationMs: Date.now() - startedAt
       }, startedAt);
       logger.warn("nav-sync-partial", resultObject);
+      lastSyncFinishedAt = Date.now();
       return resultObject;
     }
 
@@ -86,6 +99,7 @@ export async function syncNavData(options = {}) {
         durationMs: Date.now() - startedAt
       }, startedAt);
       logger.warn("nav-sync-stale", resultObject);
+      lastSyncFinishedAt = Date.now();
       return resultObject;
     }
 
@@ -111,6 +125,7 @@ export async function syncNavData(options = {}) {
         durationMs: Date.now() - startedAt
       }, startedAt);
       logger.warn("nav-sync-snapshot-partial", resultObject);
+      lastSyncFinishedAt = Date.now();
       return resultObject;
     }
 
@@ -127,6 +142,7 @@ export async function syncNavData(options = {}) {
       durationMs: Date.now() - startedAt
     }, startedAt);
     logger.info("nav-sync-updated", resultObject);
+    lastSyncFinishedAt = Date.now();
     return resultObject;
   } catch (error) {
     logger.error("nav-sync-failed", {

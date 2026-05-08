@@ -23,8 +23,6 @@ services:
         value: 60000
       - key: MONGODB_URI
         sync: false
-      - key: NAV_CRON_TOKEN
-        sync: false
   - type: cron
     name: funalytics-nav-refresh-0100
     runtime: node

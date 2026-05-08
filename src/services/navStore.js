@@ -3,12 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import mongoose from "mongoose";
 import { Fund } from "../models/Fund.js";
-import { env } from "../config/env.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const cacheDir = path.resolve(__dirname, "../../data");
 const cachePath = path.join(cacheDir, "nav-cache.json");
+const NAV_BULK_BATCH_SIZE = 1000;
 
 function isDbReady() {
   return mongoose.connection.readyState === 1;
@@ -134,7 +134,7 @@ export async function getLatestNavDate() {
 
 export async function saveNavRecords(records = []) {
   if (isDbReady()) {
-    const chunks = chunkRecords(records, env.navBulkBatchSize);
+    const chunks = chunkRecords(records, NAV_BULK_BATCH_SIZE);
     let upsertedCount = 0;
     let modifiedCount = 0;
     for (const chunk of chunks) {
