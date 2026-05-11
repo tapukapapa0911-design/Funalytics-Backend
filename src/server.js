@@ -1,13 +1,42 @@
 import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { connectToDatabase } from "./config/db.js";
-import { ensureSnapshotFile, readSnapshotFile } from "./services/snapshotStore.js";
+import { ensureSnapshotFile, readSnapshotFile, writeSnapshotFile } from "./services/snapshotStore.js";
 import { triggerNavUpdate } from "./jobs/navUpdater.js";
+import { isSupabaseAvailable, readNavFromSupabase } from "./services/supabaseNavStore.js";
 import { logger } from "./utils/logger.js";
 import mongoose from "mongoose";
 
+async function restoreSnapshotFromSupabaseIfNewer() {
+  if (!isSupabaseAvailable()) {
+    logger.info("Supabase unavailable, using local file cache");
+    return;
+  }
+
+  const remote = await readNavFromSupabase();
+  if (!remote?.nav_date || !remote?.snapshot_json) {
+    logger.info("Supabase unavailable, using local file cache");
+    return;
+  }
+
+  const local = readSnapshotFile();
+  const localDate = String(local?.latestDate || "").trim();
+  if (localDate && localDate >= remote.nav_date) {
+    return;
+  }
+
+  try {
+    const parsedSnapshot = JSON.parse(remote.snapshot_json);
+    writeSnapshotFile(parsedSnapshot);
+    logger.info(`NAV restored from Supabase: ${remote.nav_date}`);
+  } catch (error) {
+    logger.warn(`Supabase NAV restore failed, using local file cache: ${error?.message || error}`);
+  }
+}
+
 async function bootstrap() {
   ensureSnapshotFile();
+  await restoreSnapshotFromSupabaseIfNewer();
   try {
     await connectToDatabase();
   } catch (error) {

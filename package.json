@@ -12,6 +12,7 @@
     "ingest": "node src/jobs/runOnce.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.8",
     "axios": "^1.9.0",
     "compression": "^1.7.5",
     "cors": "^2.8.5",
