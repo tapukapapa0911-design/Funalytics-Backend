@@ -1,3 +1,4 @@
+import ws from 'ws';
 import { createClient } from "@supabase/supabase-js";
 import { env } from "./config/env.js";
 import { logger } from "./utils/logger.js";
@@ -16,6 +17,7 @@ export const supabase = hasConfig
       auth: {
         persistSession: false,
         autoRefreshToken: false
-      }
+      },
+      realtime: { transport: ws }
     })
   : null;
