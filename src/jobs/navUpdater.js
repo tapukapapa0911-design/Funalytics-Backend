@@ -1,6 +1,5 @@
 import { runNavIngestion } from "../services/navIngestionService.js";
 import { writeSnapshotFile } from "../services/snapshotStore.js";
-import { writeNavToSupabase } from "../services/supabaseNavStore.js";
 import { logger } from "../utils/logger.js";
 import { buildLiveSnapshotPayload, clearResponseCache } from "../routes/fundRoutes.js";
 import { readNavCachePayload } from "../services/navStore.js";
@@ -131,15 +130,6 @@ export async function syncNavData(options = {}) {
     }
 
     const snapshot = writeSnapshotFile(snapshotPayload);
-    const supabaseSynced = await writeNavToSupabase(
-      String(snapshot.latestDate || ingestionResult?.latestDate || ""),
-      JSON.stringify(snapshot)
-    );
-    if (supabaseSynced) {
-      logger.info(`NAV synced to Supabase: ${String(snapshot.latestDate || ingestionResult?.latestDate || "")}`);
-    } else {
-      logger.warn("NAV sync to Supabase failed, local snapshot retained");
-    }
     clearResponseCache();
     const resultObject = buildExecutionSummary({
       status: "updated",

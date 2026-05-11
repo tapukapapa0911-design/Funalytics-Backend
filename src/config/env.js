@@ -8,7 +8,5 @@ export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   amfiUrl: process.env.AMFI_URL || "https://www.amfiindia.com/spages/NAVAll.txt",
   requestTimeoutMs: Number(process.env.REQUEST_TIMEOUT_MS || 10000),
-  cacheTtlMs: Number(process.env.CACHE_TTL_MS || 60000),
-  supabaseUrl: String(process.env.SUPABASE_URL || "").trim(),
-  supabaseKey: String(process.env.SUPABASE_KEY || "").trim()
+  cacheTtlMs: Number(process.env.CACHE_TTL_MS || 60000)
 };

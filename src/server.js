@@ -1,42 +1,13 @@
 import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { connectToDatabase } from "./config/db.js";
-import { ensureSnapshotFile, readSnapshotFile, writeSnapshotFile } from "./services/snapshotStore.js";
+import { ensureSnapshotFile, readSnapshotFile } from "./services/snapshotStore.js";
 import { triggerNavUpdate } from "./jobs/navUpdater.js";
-import { isSupabaseAvailable, readNavFromSupabase } from "./services/supabaseNavStore.js";
 import { logger } from "./utils/logger.js";
 import mongoose from "mongoose";
 
-async function restoreSnapshotFromSupabaseIfNewer() {
-  if (!isSupabaseAvailable()) {
-    logger.info("Supabase unavailable, using local file cache");
-    return;
-  }
-
-  const remote = await readNavFromSupabase();
-  if (!remote?.nav_date || !remote?.snapshot_json) {
-    logger.info("Supabase unavailable, using local file cache");
-    return;
-  }
-
-  const local = readSnapshotFile();
-  const localDate = String(local?.latestDate || "").trim();
-  if (localDate && localDate >= remote.nav_date) {
-    return;
-  }
-
-  try {
-    const parsedSnapshot = JSON.parse(remote.snapshot_json);
-    writeSnapshotFile(parsedSnapshot);
-    logger.info(`NAV restored from Supabase: ${remote.nav_date}`);
-  } catch (error) {
-    logger.warn(`Supabase NAV restore failed, using local file cache: ${error?.message || error}`);
-  }
-}
-
 async function bootstrap() {
   ensureSnapshotFile();
-  await restoreSnapshotFromSupabaseIfNewer();
   try {
     await connectToDatabase();
   } catch (error) {
@@ -48,12 +19,17 @@ async function bootstrap() {
   const server = app.listen(port, () => {
     logger.info(`Server started on port ${port}`);
     const snapshot = readSnapshotFile();
-    const isSnapshotEmpty = !snapshot.generatedAt || !snapshot.latestDate || !Array.isArray(snapshot.items) || !snapshot.items.length;
-    if (isSnapshotEmpty) {
-      logger.info("Snapshot empty on startup, triggering immediate NAV warmup");
-      triggerNavUpdate().catch((error) => {
-        logger.warn(`Startup NAV warmup failed: ${error?.message || error}`);
+    const generatedAt = snapshot?.generatedAt ? new Date(snapshot.generatedAt) : null;
+    const ageMs = generatedAt ? Date.now() - generatedAt.getTime() : Infinity;
+    const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+
+    if (ageMs > TWELVE_HOURS) {
+      logger.info("Stale NAV snapshot on startup, triggering auto-refresh");
+      triggerNavUpdate().catch((err) => {
+        logger.warn(`Startup auto-refresh failed: ${err?.message || err}`);
       });
+    } else {
+      logger.info("NAV snapshot is fresh, skipping startup auto-refresh");
     }
   });
 
