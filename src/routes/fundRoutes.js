@@ -1,4 +1,4 @@
-﻿import express from "express";
+import express from "express";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -98,6 +98,34 @@ const shouldSkipRedundantNavUpdate = (snapshot) => (
   && String(snapshot?.latestDate || "") >= currentDisplayEligibleNavDate()
 );
 
+const navPayloadRank = (payload = {}) => ({
+  latestDate: String(payload?.latestDate || ""),
+  timestamp: String(payload?.lastFetchTimestamp || payload?.generatedAt || ""),
+  count: Number(payload?.count || (Array.isArray(payload?.items) ? payload.items.length : 0) || 0)
+});
+
+const pickFreshestNavPayload = (...payloads) => {
+  const valid = payloads
+    .filter(Boolean)
+    .map((payload) => ({
+      payload,
+      rank: navPayloadRank(payload)
+    }))
+    .filter(({ rank }) => rank.count > 0 || rank.latestDate);
+  if (!valid.length) return readSnapshotFile();
+
+  valid.sort((left, right) => {
+    const dateDelta = String(right.rank.latestDate || "").localeCompare(String(left.rank.latestDate || ""));
+    if (dateDelta !== 0) return dateDelta;
+    const fullDelta = Number(right.rank.count >= MIN_FULL_NAV_ROWS) - Number(left.rank.count >= MIN_FULL_NAV_ROWS);
+    if (fullDelta !== 0) return fullDelta;
+    const timeDelta = String(right.rank.timestamp || "").localeCompare(String(left.rank.timestamp || ""));
+    if (timeDelta !== 0) return timeDelta;
+    return Number(right.rank.count || 0) - Number(left.rank.count || 0);
+  });
+  return valid[0].payload;
+};
+
 async function handleNavUpdateRequest(_req, res) {
   const startedAt = Date.now();
   try {
@@ -113,10 +141,12 @@ async function handleNavUpdateRequest(_req, res) {
       || String(_req?.query?.force || "").toLowerCase() === "true";
     const now = Date.now();
     if (!force && lastUpdateNavRequestAt && (now - lastUpdateNavRequestAt) < UPDATE_NAV_ROUTE_COOLDOWN_MS) {
+      const existingSnapshot = readSnapshotFile();
       return res.status(200).json({
         success: true,
         status: "skipped",
         updated: 0,
+        latestDate: existingSnapshot.latestDate || "",
         duration: `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
       });
     }
@@ -137,6 +167,19 @@ async function handleNavUpdateRequest(_req, res) {
     }
 
     const result = await syncNavData({ force, minRows });
+    if (result.status === "running") {
+      const existingSnapshot = readSnapshotFile();
+      return res.status(202).json({
+        success: false,
+        status: "running",
+        fetched: 0,
+        matched: 0,
+        updated: 0,
+        failed: 0,
+        latestDate: existingSnapshot.latestDate || result.latestDate || "",
+        duration: result.duration || `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
+      });
+    }
     const updated = await getLiveSnapshotPayload();
     return res.status(result.status === "running" ? 202 : 200).json({
       success: result.success,
@@ -282,11 +325,13 @@ export async function buildLiveSnapshotPayload() {
 }
 
 async function getLiveSnapshotPayload() {
+  const storedSnapshot = readSnapshotFile();
   try {
-    return await buildLiveSnapshotPayload();
+    const livePayload = await buildLiveSnapshotPayload();
+    return pickFreshestNavPayload(livePayload, storedSnapshot);
   } catch (error) {
     logger.warn("Falling back to stored snapshot file", error?.message || error);
-    return readSnapshotFile();
+    return storedSnapshot;
   }
 }
 
