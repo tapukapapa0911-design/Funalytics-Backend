@@ -35,6 +35,16 @@ function setCached(key, payload, ttlMs = env.cacheTtlMs) {
   });
 }
 
+function deleteCached(key) {
+  responseCache.delete(key);
+}
+
+function invalidateNavResponseCache() {
+  deleteCached("nav");
+  deleteCached("nav-summary");
+  deleteCached("snapshot");
+}
+
 const safeResponse = (obj) => {
   const out = {};
   for (const [key, value] of Object.entries(obj || {})) {
@@ -98,6 +108,16 @@ const shouldSkipRedundantNavUpdate = (snapshot) => (
   && String(snapshot?.latestDate || "") >= currentDisplayEligibleNavDate()
 );
 
+const isNavCacheUsable = (cached, storedSnapshot = readSnapshotFile()) => {
+  if (!cached) return false;
+  const cachedRank = navPayloadRank(cached);
+  const storedRank = navPayloadRank(storedSnapshot);
+  if (storedRank.latestDate && cachedRank.latestDate < storedRank.latestDate) return false;
+  if (storedRank.count >= MIN_FULL_NAV_ROWS && cachedRank.count < MIN_FULL_NAV_ROWS) return false;
+  if (storedRank.timestamp && cachedRank.timestamp && cachedRank.timestamp < storedRank.timestamp) return false;
+  return true;
+};
+
 const navPayloadRank = (payload = {}) => ({
   latestDate: String(payload?.latestDate || ""),
   timestamp: String(payload?.lastFetchTimestamp || payload?.generatedAt || ""),
@@ -142,6 +162,7 @@ async function handleNavUpdateRequest(_req, res) {
     const now = Date.now();
     if (!force && lastUpdateNavRequestAt && (now - lastUpdateNavRequestAt) < UPDATE_NAV_ROUTE_COOLDOWN_MS) {
       const existingSnapshot = readSnapshotFile();
+      invalidateNavResponseCache();
       return res.status(200).json({
         success: true,
         status: "skipped",
@@ -157,6 +178,7 @@ async function handleNavUpdateRequest(_req, res) {
       : MIN_FULL_NAV_ROWS;
     const existing = await getLiveSnapshotPayload();
     if (!force && shouldSkipRedundantNavUpdate(existing)) {
+      invalidateNavResponseCache();
       return res.status(200).json({
         success: true,
         status: "skipped",
@@ -181,6 +203,7 @@ async function handleNavUpdateRequest(_req, res) {
       });
     }
     const updated = await getLiveSnapshotPayload();
+    invalidateNavResponseCache();
     return res.status(result.status === "running" ? 202 : 200).json({
       success: result.success,
       status: result.status,
@@ -338,8 +361,10 @@ async function getLiveSnapshotPayload() {
 router.get("/nav-summary", async (_req, res, next) => {
   try {
     res.set("Cache-Control", "public, max-age=60");
+    const storedSnapshot = readSnapshotFile();
     const cached = getCached("nav-summary");
-    if (cached) return res.json(cached);
+    if (isNavCacheUsable(cached, storedSnapshot)) return res.json(cached);
+    if (cached) deleteCached("nav-summary");
     const payload = await getLiveSnapshotPayload();
     const summary = safeResponse({
       latestDate: String(payload?.latestDate || ""),
@@ -355,7 +380,8 @@ router.get("/nav-summary", async (_req, res, next) => {
   }
 });
 
-router.get("/health", async (_req, res) => {
+router.get("/health", (_req, res) => {
+  res.set("Cache-Control", "no-store");
   res.json({ status: "ok" });
 });
 
@@ -382,8 +408,10 @@ router.route("/update-nav")
 router.get("/nav", async (_req, res, next) => {
   try {
     res.set("Cache-Control", "public, max-age=60");
+    const storedSnapshot = readSnapshotFile();
     const cached = getCached("nav");
-    if (cached) return res.json(cached);
+    if (isNavCacheUsable(cached, storedSnapshot)) return res.json(cached);
+    if (cached) deleteCached("nav");
     const data = await getLiveSnapshotPayload();
     setCached("nav", data, 60 * 1000);
     res.json(data);
